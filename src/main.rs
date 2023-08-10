@@ -1,24 +1,30 @@
-use rocket::{get, launch, routes};
+use rocket::{get};
+use rocket::fs::NamedFile;
+use std::path::PathBuf;
+use tokio::runtime::Runtime;
 
 mod encryption;
 mod networking;
 mod web_interface;
 mod util;
 
+const BASE_PATH_STR: &str = "src/web_interface/static/";
+
 #[get("/")]
-fn index() -> &'static str {
-    "Welcome to the P2P File Transfer App!"
+async fn index() -> Option<NamedFile> {
+    NamedFile::open(PathBuf::from(BASE_PATH_STR).join("index.html")).await.ok()
 }
 
-#[launch]
-fn rocket() -> _ {
-    rocket::build()
-        .mount("/", routes![index])
-        .attach(web_interface::upload_file::stage())
-        .attach(web_interface::download_file::stage())
-        .manage(initialize_networking())
-}
-
-fn initialize_networking() -> networking::NetworkManager {
+async fn initialize_networking() -> networking::NetworkManager {
+    tokio::spawn(networking::start_signaling_server()).await;
     networking::NetworkManager::new()
+}
+
+fn main() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async_main());
+}
+
+async fn async_main() {
+    // Your async code here
 }
