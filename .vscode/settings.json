@@ -1,0 +1,12 @@
+{
+    "multiCommand.commands": [
+        {
+          "command": "multiCommand.restartDebug",
+          "interval": 30,
+          "sequence": [
+            "workbench.action.debug.stop",
+            "workbench.action.debug.start"
+          ]
+        }
+      ]      
+}

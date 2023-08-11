@@ -1,30 +1,31 @@
-use rocket::{get};
-use rocket::fs::NamedFile;
+use once_cell::sync::Lazy;
+use rocket::fs::{FileServer, NamedFile};
+use rocket::routes;
 use std::path::PathBuf;
 use tokio::runtime::Runtime;
 
 mod encryption;
 mod networking;
-mod web_interface;
 mod util;
+mod web_interface;
 
-const BASE_PATH_STR: &str = "src/web_interface/static/";
+const BASE_PATH: &str = "src/web_interface/static/";
+static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(BASE_PATH).join("index.html"));
 
-#[get("/")]
-async fn index() -> Option<NamedFile> {
-    NamedFile::open(PathBuf::from(BASE_PATH_STR).join("index.html")).await.ok()
-}
-
-async fn initialize_networking() -> networking::NetworkManager {
-    tokio::spawn(networking::start_signaling_server()).await;
-    networking::NetworkManager::new()
+#[rocket::get("/")]
+pub async fn index() -> Option<NamedFile> {
+    NamedFile::open(&*INDEX_PATH).await.ok()
 }
 
 fn main() {
     let rt = Runtime::new().unwrap();
-    rt.block_on(async_main());
-}
-
-async fn async_main() {
-    // Your async code here
+    rt.block_on(async {
+        networking::initialize_networking();
+        rocket::build()
+            .mount("/", routes![index])
+            .mount("/static", FileServer::from(BASE_PATH))
+            .launch()
+            .await
+            .unwrap();
+    });
 }
