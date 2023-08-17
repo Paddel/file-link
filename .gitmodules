@@ -1,0 +1,3 @@
+[submodule "frontend/zstd"]
+	path = frontend/zstd
+	url = https://github.com/gyscos/zstd-rs.git
