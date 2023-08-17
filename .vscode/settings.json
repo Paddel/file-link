@@ -8,5 +8,13 @@
             "workbench.action.debug.start"
           ]
         }
-      ]      
+      ],
+      "workbench.colorCustomizations": {
+        "activityBar.background": "#3E2445",
+        "titleBar.activeBackground": "#573260",
+        "titleBar.activeForeground": "#FBF9FC"
+      },
+      "rust-analyzer.linkedProjects": [
+        ".\\frontend\\Cargo.toml"
+      ]
 }

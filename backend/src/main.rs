@@ -9,7 +9,7 @@ mod networking;
 mod util;
 mod web_interface;
 
-const BASE_PATH: &str = "src/web_interface/static/";
+const BASE_PATH: &str = "./public/static/";
 static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(BASE_PATH).join("index.html"));
 
 #[rocket::get("/")]
@@ -23,7 +23,7 @@ fn main() {
         networking::initialize_networking();
         rocket::build()
             .mount("/", routes![index])
-            .mount("/static", FileServer::from(BASE_PATH))
+            .mount("/public", FileServer::from("./public"))
             .launch()
             .await
             .unwrap();
