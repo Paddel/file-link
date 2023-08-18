@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
+use std::sync::Arc;
 
 use base64;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use yew::{html, html::NodeRef, Context, Component, Html, KeyboardEvent, TargetCast};
 
-use crate::rtc::chat::web_rtc_manager::{ConnectionState, IceCandidate, NetworkManager, State};
+use crate::rtc::chat::web_rtc_manager::{CallbackType, ConnectionState, IceCandidate, NetworkManager, State};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageSender {
@@ -43,6 +44,7 @@ pub struct ChatModel<T: NetworkManager + 'static> {
     value: String,
     chat_value: String,
     node_ref: NodeRef,
+    callback: Arc<Box<dyn Fn(CallbackType)>>,
 }
 
 #[derive(Clone, Debug)]
@@ -68,16 +70,34 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
+        let link = ctx.link().clone();
+        let callback: Box<dyn Fn(CallbackType) + 'static> = Box::new(move |callback_type| match callback_type {
+            CallbackType::ResetWebRTC {} => {
+                link.send_message(Msg::ResetWebRTC);
+            }
+            CallbackType::UpdateWebRTCState(web_rtc_state) => {
+                link.send_message(Msg::UpdateWebRTCState(web_rtc_state));
+            }
+            CallbackType::NewMessage(message) => {
+                link.send_message(Msg::NewMessage(message));
+            }
+        });
+        let callback = Arc::new(callback);
+
+
         ChatModel {
-            web_rtc_manager: T::new(ctx.link()),
+            web_rtc_manager: T::new(callback.clone()),
             messages: vec![],
             value: "".into(),
             chat_value: "".into(),
             node_ref: NodeRef::default(),
+            callback,
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    //static function create callback
+
+    fn update(&mut self, _: &Context<Self>, msg: Self::Message) -> bool {
     // fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::StartAsServer => {
@@ -114,7 +134,8 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             }
 
             Msg::ResetWebRTC => {
-                self.web_rtc_manager = T::new(ctx.link());
+
+                self.web_rtc_manager = T::new(Arc::clone(&self.callback));
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
@@ -189,7 +210,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             }
 
             Msg::Disconnect => {
-                self.web_rtc_manager = T::new(ctx.link());
+                self.web_rtc_manager = T::new(self.callback.clone());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();

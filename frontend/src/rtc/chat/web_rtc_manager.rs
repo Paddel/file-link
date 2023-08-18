@@ -1,10 +1,11 @@
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::rtc::chat::chat_model::{ChatModel, ConnectionString, Msg};
+use crate::rtc::chat::chat_model::ConnectionString;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
+use std::sync::Arc;
 
 use base64;
 use js_sys::{Array, Object, Reflect, JSON};
@@ -18,12 +19,50 @@ use web_sys::{
 };
 
 use crate::rtc::{Message, MessageSender};
-use yew::html::Scope;
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
 type SingleArgJsFn = Box<dyn FnMut(JsValue)>;
 
 const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
+
+use zstd;
+use std::io::{Read, Write};
+
+pub enum CallbackType {
+    ResetWebRTC,
+    UpdateWebRTCState(State),
+    NewMessage(Message),
+}
+
+// fn compress(source: &str) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>> {
+//     let mut encoder = zstd::Encoder::new(Vec::new(), 1)?;
+//     encoder.write_all(source.as_bytes())?;
+//     let compressed = encoder.finish()?;
+//     Ok(compressed)
+// }
+
+// fn decompress(source: &[u8]) -> Result<String> {
+//     let mut decoder = zstd::Decoder::new(source)?;
+//     let mut decompressed = String::new();
+//     decoder.read_to_string(&mut decompressed)?;
+//     Ok(decompressed)
+// }
+
+fn compress(source: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
+    let mut encoder = zstd::Encoder::new(Vec::new(), 1)?;
+    encoder.write_all(source.as_bytes())?;
+    let compressed = encoder.finish()?;
+    Ok(base64::encode(&compressed))
+}
+
+
+fn decompress(source: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
+    let compressed_bytes = base64::decode(source)?;
+    let mut decoder = zstd::Decoder::new(&compressed_bytes[..])?;
+    let mut decompressed = String::new();
+    decoder.read_to_string(&mut decompressed)?;
+    Ok(decompressed)
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ConnectionState {
@@ -66,7 +105,7 @@ pub struct IceCandidate {
 }
 
 pub trait NetworkManager {
-    fn new(link: &Scope<ChatModel<Self>>) -> Rc<RefCell<Self>>
+    fn new(callback: Arc<Box<dyn Fn(CallbackType)>>) -> Rc<RefCell<Self>>
     where
         Self: Sized;
     fn send_message(&self, message_content: &str);
@@ -74,9 +113,9 @@ pub trait NetworkManager {
     fn set_state(&mut self, new_state: State);
     fn get_offer(&self) -> Option<String>;
     fn get_ice_candidates(&self) -> Vec<IceCandidate>;
-    fn validate_offer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> Result<(), OfferError>;
-    fn validate_answer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> Result<(), OfferError>;
-    fn start_web_rtc(web_rtc_manager: Rc<RefCell<Self>>) -> Result<(), JsValue>;
+    fn validate_offer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> std::result::Result<(), OfferError>;
+    fn validate_answer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> std::result::Result<(), OfferError>;
+    fn start_web_rtc(web_rtc_manager: Rc<RefCell<Self>>) -> std::result::Result<(), JsValue>;
 }
 
 pub struct WebRTCManager {
@@ -86,27 +125,28 @@ pub struct WebRTCManager {
     exit_offer_or_answer_early: bool,
     ice_candidates: Vec<IceCandidate>,
     offer: Option<String>,
-    parent_link: Scope<ChatModel<Self>>,
+    callback: Arc<Box<dyn Fn(CallbackType)>>,
 }
 
 impl NetworkManager for WebRTCManager {
-    fn new(link: &Scope<ChatModel<Self>>) -> Rc<RefCell<Self>> {
+    fn new(callback: Arc<Box<dyn Fn(CallbackType)>>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(WebRTCManager {
             state: State::Default,
             rtc_peer_connection: None,
             data_channel: None,
             ice_candidates: Vec::new(),
             offer: None,
-            parent_link: link.clone(),
             exit_offer_or_answer_early: false,
+            callback,
         }))
     }
 
     fn send_message(&self, message_content: &str) {
+        let message_content = compress(message_content).unwrap();
         self.data_channel
             .as_ref()
             .expect("must have a data channel")
-            .send_with_str(message_content)
+            .send_with_str(&message_content)
             .expect("channel is open");
 
         //TODO error handling ?
@@ -131,7 +171,7 @@ impl NetworkManager for WebRTCManager {
     fn validate_offer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         str: &str,
-    ) -> Result<(), OfferError> {
+    ) -> std::result::Result<(), OfferError> {
         let connection_string = WebRTCManager::parse_base64_str_to_connection(str);
 
         if connection_string.is_err() {
@@ -246,7 +286,7 @@ impl NetworkManager for WebRTCManager {
     fn validate_answer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         str: &str,
-    ) -> Result<(), OfferError> {
+    ) -> std::result::Result<(), OfferError> {
         let connection_string = WebRTCManager::parse_base64_str_to_connection(str);
 
         if connection_string.is_err() {
@@ -278,10 +318,9 @@ impl NetworkManager for WebRTCManager {
             )
             .expect("alert should work");
 
-            web_rtc_manager_rc_clone
+            (web_rtc_manager_rc_clone
                 .borrow()
-                .parent_link
-                .send_message(Msg::ResetWebRTC);
+                .callback)(CallbackType::ResetWebRTC);
         }) as SingleArgJsFn);
 
         let connection_string = Rc::new(connection_string);
@@ -305,7 +344,7 @@ impl NetworkManager for WebRTCManager {
         Ok(())
     }
 
-    fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> Result<(), JsValue> {
+    fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> std::result::Result<(), JsValue> {
         let rtc_peer_connection = {
             let ice_servers = Array::new();
             {
@@ -491,7 +530,7 @@ impl WebRTCManager {
         }
     }
 
-    fn parse_base64_str_to_connection(str: &str) -> Result<ConnectionString, OfferError> {
+    fn parse_base64_str_to_connection(str: &str) -> std::result::Result<ConnectionString, OfferError> {
         base64::decode(str)
             .map_err(|_| OfferError::InvalidBase64)
             .and_then(|a| {
@@ -546,10 +585,9 @@ impl WebRTCManager {
 
             let web_rtc_state = web_rtc_manager.borrow().get_state();
 
-            web_rtc_manager
+            (web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::UpdateWebRTCState(web_rtc_state));
+                .callback)(CallbackType::UpdateWebRTCState(web_rtc_state));
         }) as SingleArgJsFn)
     }
 
@@ -558,12 +596,12 @@ impl WebRTCManager {
             let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
 
             let msg_content: String = message_event.data().as_string().unwrap();
-            let msg = Message::new(msg_content, MessageSender::Other);
+            let compressed = decompress(&msg_content).unwrap();
+            let msg = Message::new(compressed, MessageSender::Other);
 
-            web_rtc_manager
+            (web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::NewMessage(msg));
+                .callback)(CallbackType::NewMessage(msg));
         }) as SingleArgJsFn)
     }
 
@@ -595,10 +633,9 @@ impl WebRTCManager {
 
             let web_rtc_state = web_rtc_manager.borrow().get_state();
 
-            web_rtc_manager
+            (web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::UpdateWebRTCState(web_rtc_state));
+                .callback)(CallbackType::UpdateWebRTCState(web_rtc_state));
         }) as SingleArgJsFn)
     }
 
@@ -629,10 +666,9 @@ impl WebRTCManager {
             web_rtc_manager.borrow_mut().set_state(new_state);
             let web_rtc_state = web_rtc_manager.borrow().get_state();
 
-            web_rtc_manager
+            (web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::UpdateWebRTCState(web_rtc_state));
+                .callback)(CallbackType::UpdateWebRTCState(web_rtc_state));
         }) as SingleArgJsFn)
     }
 
