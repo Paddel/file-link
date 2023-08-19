@@ -1,11 +1,9 @@
-use crate::rtc::chat::chat_model::ConnectionString;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
 use std::sync::Arc;
 
-use base64;
+use base64::{engine::general_purpose, Engine as _};
 use js_sys::{Array, Object, Reflect, JSON};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::closure::Closure;
@@ -61,6 +59,13 @@ pub enum CallbackType {
 //     decoder.read_to_string(&mut decompressed)?;
 //     Ok(decompressed)
 // }
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConnectionString {
+    pub ice_candidates: Vec<IceCandidate>,
+    pub offer: String, // TODO : convert as JsValue using Json.Parse
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ConnectionState {
@@ -527,7 +532,7 @@ impl WebRTCManager {
     }
 
     fn parse_base64_str_to_connection(str: &str) -> std::result::Result<ConnectionString, OfferError> {
-        base64::decode(str)
+        general_purpose::STANDARD.decode(str)
             .map_err(|_| OfferError::InvalidBase64)
             .and_then(|a| {
                 let to_str = str::from_utf8(&a);

@@ -1,21 +1,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::str;
 use std::sync::Arc;
 
-use base64;
-use serde::{Deserialize, Serialize};
-
-use web_sys::{console, Element, HtmlInputElement, InputEvent, RtcDataChannelState};
-
+use base64::{engine::general_purpose, Engine as _};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
-
+use web_sys::{console, Element, HtmlInputElement, InputEvent, RtcDataChannelState};
 use yew::{html, html::NodeRef, Context, Component, Html, KeyboardEvent, TargetCast};
 
-use crate::rtc::chat::web_rtc_manager::{CallbackType, ConnectionState, IceCandidate, NetworkManager, State};
-
-use super::web_rtc_manager;
+use crate::web_rtc_manager::{CallbackType, ConnectionState, ConnectionString, NetworkManager, State};
+use crate::web_rtc_manager;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageSender {
@@ -35,11 +29,6 @@ impl Message {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ConnectionString {
-    pub ice_candidates: Vec<IceCandidate>,
-    pub offer: String, // TODO : convert as JsValue using Json.Parse
-}
 pub struct ChatModel<T: NetworkManager + 'static> {
     web_rtc_manager: Rc<RefCell<T>>,
     messages: Vec<Message>,
@@ -569,7 +558,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
 
         let serialized: String = serde_json::to_string(&connection_string).unwrap();
 
-        base64::encode(serialized)
+        general_purpose::STANDARD.encode(serialized)
     }
 
     fn get_offer_and_candidates(&self, ctx: &Context<Self>) -> Html {

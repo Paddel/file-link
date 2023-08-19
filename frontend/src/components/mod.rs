@@ -1,8 +1,11 @@
-use yew::prelude::*;
-use yew_router::prelude::*;
+use yew::prelude::{html, Html};
+use yew_router::prelude::Routable;
 
-use crate::rtc::chat::web_rtc_manager::WebRTCManager;
-use crate::rtc::chat::chat_model::*;
+mod chat_model;
+mod home;
+
+use crate::web_rtc_manager::WebRTCManager;
+use chat_model::*;
 
 #[derive(Clone, Routable, PartialEq)]
 pub enum Route {
@@ -19,11 +22,7 @@ pub enum Route {
 
 pub fn switch(route: Route) -> Html {
     match route {
-        // Route::Home => html! { <Model /> },
-        Route::Home => html! { <ChatModel<WebRTCManager> /> },
-        Route::Send => html! { <p>{format!("You are looking at Post")}</p> },
-        // Route::Send => html! { <ChatModel<WebRTCManager> /> },
-        // Route::Post { id } => html! {<p>{format!("You are looking at Post {}", id)}</p>},
-        // Route::Misc { path } => html! {<p>{format!("Matched some other path: {}", path)}</p>},
+        Route::Home => html! { <home::Home /> },
+        Route::Send => html! { <ChatModel<WebRTCManager> /> },
     }
 }
