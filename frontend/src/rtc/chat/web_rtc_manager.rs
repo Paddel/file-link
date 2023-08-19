@@ -1,5 +1,3 @@
-use wasm_bindgen::{JsCast, JsValue};
-
 use crate::rtc::chat::chat_model::ConnectionString;
 
 use std::cell::RefCell;
@@ -11,27 +9,27 @@ use base64;
 use js_sys::{Array, Object, Reflect, JSON};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::closure::Closure;
+use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
+
 use web_sys::{
-    console, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit,
+    Blob, console, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit,
     RtcDataChannelState, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
     RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSessionDescriptionInit,
 };
-
-use crate::rtc::{Message, MessageSender};
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
 type SingleArgJsFn = Box<dyn FnMut(JsValue)>;
 
 const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
 
-use zstd;
-use std::io::{Read, Write};
+// use zstd;
+// use std::io::{Read, Write};
 
 pub enum CallbackType {
     ResetWebRTC,
     UpdateWebRTCState(State),
-    NewMessage(Message),
+    NewMessage(Blob),
 }
 
 // fn compress(source: &str) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -48,21 +46,21 @@ pub enum CallbackType {
 //     Ok(decompressed)
 // }
 
-fn compress(source: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
-    let mut encoder = zstd::Encoder::new(Vec::new(), 1)?;
-    encoder.write_all(source.as_bytes())?;
-    let compressed = encoder.finish()?;
-    Ok(base64::encode(&compressed))
-}
+// fn compress(source: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
+//     let mut encoder = zstd::Encoder::new(Vec::new(), 1)?;
+//     encoder.write_all(source.as_bytes())?;
+//     let compressed = encoder.finish()?;
+//     Ok(base64::encode(&compressed))
+// }
 
 
-fn decompress(source: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
-    let compressed_bytes = base64::decode(source)?;
-    let mut decoder = zstd::Decoder::new(&compressed_bytes[..])?;
-    let mut decompressed = String::new();
-    decoder.read_to_string(&mut decompressed)?;
-    Ok(decompressed)
-}
+// fn decompress(source: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
+//     let compressed_bytes = base64::decode(source)?;
+//     let mut decoder = zstd::Decoder::new(&compressed_bytes[..])?;
+//     let mut decompressed = String::new();
+//     decoder.read_to_string(&mut decompressed)?;
+//     Ok(decompressed)
+// }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ConnectionState {
@@ -108,7 +106,7 @@ pub trait NetworkManager {
     fn new(callback: Arc<Box<dyn Fn(CallbackType)>>) -> Rc<RefCell<Self>>
     where
         Self: Sized;
-    fn send_message(&self, message_content: &str);
+    fn send_message(&self, message_content: &[u8]);
     fn get_state(&self) -> State;
     fn set_state(&mut self, new_state: State);
     fn get_offer(&self) -> Option<String>;
@@ -141,15 +139,13 @@ impl NetworkManager for WebRTCManager {
         }))
     }
 
-    fn send_message(&self, message_content: &str) {
-        let message_content = compress(message_content).unwrap();
+    fn send_message(&self, message_content: &[u8]) {
+        // let message_content = compress(message_content).unwrap();
         self.data_channel
             .as_ref()
             .expect("must have a data channel")
-            .send_with_str(&message_content)
+            .send_with_u8_array(&message_content)
             .expect("channel is open");
-
-        //TODO error handling ?
     }
 
     fn get_state(&self) -> State {
@@ -594,14 +590,11 @@ impl WebRTCManager {
     fn get_on_data_closure(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> SingleArgClosure {
         Closure::wrap(Box::new(move |arg: JsValue| {
             let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
-
-            let msg_content: String = message_event.data().as_string().unwrap();
-            let compressed = decompress(&msg_content).unwrap();
-            let msg = Message::new(compressed, MessageSender::Other);
+            let blob: web_sys::Blob = message_event.data().dyn_into().expect("Failed to cast to Blob");//TODO: handle panic
 
             (web_rtc_manager
                 .borrow()
-                .callback)(CallbackType::NewMessage(msg));
+                .callback)(CallbackType::NewMessage(blob));
         }) as SingleArgJsFn)
     }
 
@@ -706,4 +699,13 @@ impl WebRTCManager {
 
         web_rtc_manager.borrow_mut().data_channel = Some(data_channel);
     }
+}
+
+pub async fn read_blob_as_string(blob: Blob) -> Result<String, JsValue> {
+    let text_js_future = JsFuture::from(blob.text());
+    let text_js_value = text_js_future.await?;
+    let text_js_string = text_js_value
+        .dyn_into::<js_sys::JsString>()
+        .map_err(|_| JsValue::from_str("Failed to read blob as string"))?;
+    Ok(text_js_string.into())
 }

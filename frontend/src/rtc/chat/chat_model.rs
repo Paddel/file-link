@@ -15,6 +15,8 @@ use yew::{html, html::NodeRef, Context, Component, Html, KeyboardEvent, TargetCa
 
 use crate::rtc::chat::web_rtc_manager::{CallbackType, ConnectionState, IceCandidate, NetworkManager, State};
 
+use super::web_rtc_manager;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageSender {
     Me,
@@ -78,8 +80,21 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             CallbackType::UpdateWebRTCState(web_rtc_state) => {
                 link.send_message(Msg::UpdateWebRTCState(web_rtc_state));
             }
-            CallbackType::NewMessage(message) => {
-                link.send_message(Msg::NewMessage(message));
+            CallbackType::NewMessage(blob) => {
+                // if !blob.is_string() {
+                //     console::log_1(&"blob is not a string".into());
+                //     return;
+                // }
+                
+                let link = link.clone();
+                spawn_local(async move {
+                    let result = web_rtc_manager::read_blob_as_string(blob).await;
+                    let msg = Message::new(result.unwrap(), MessageSender::Other);
+                    link.send_message(Msg::NewMessage(msg));
+                });
+
+                
+                
             }
         });
         let callback = Arc::new(callback);
@@ -202,7 +217,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             Msg::Send => {
                 let my_message = Message::new(self.chat_value.clone(), MessageSender::Me);
                 self.messages.push(my_message);
-                self.web_rtc_manager.borrow().send_message(&self.chat_value);
+                self.web_rtc_manager.borrow().send_message(&self.chat_value.as_bytes());
                 self.chat_value = "".into();
                 self.scroll_top();
 
@@ -222,7 +237,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 if event.key_code() == 13 && !self.chat_value.is_empty() {
                     let my_message = Message::new(self.chat_value.clone(), MessageSender::Me);
                     self.messages.push(my_message);
-                    self.web_rtc_manager.borrow().send_message(&self.chat_value);
+                    self.web_rtc_manager.borrow().send_message(&self.chat_value.as_bytes());
                     self.chat_value = "".into();
                     self.scroll_top();
                 }
