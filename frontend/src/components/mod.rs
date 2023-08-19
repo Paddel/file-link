@@ -3,7 +3,6 @@ use yew_router::prelude::*;
 
 use crate::rtc::chat::web_rtc_manager::WebRTCManager;
 use crate::rtc::chat::chat_model::*;
-use crate::conn::Model;
 
 #[derive(Clone, Routable, PartialEq)]
 pub enum Route {
