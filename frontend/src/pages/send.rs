@@ -1,4 +1,4 @@
-use yew::{html, Callback, Context, Component, Html};
+use yew::{html, Callback, Context, Component, DragEvent, Html};
 
 use crate::components::drop_field::DropField;
 use crate::components::draggable::{Draggable, Indicator};
@@ -38,15 +38,52 @@ impl Component for Send {
         let drag: Callback<bool> = Callback::from(move |value: bool| {
             scope.send_message(Msg::Drag(value));
         });
-        
-        // ctx.link().send_message(Msg::Drag(value));
+
+        let dropfield_files_accepted = Callback::from(move |event: DragEvent| {
+            let types = event.data_transfer().unwrap().types();
+            let mut accepted = false;
+            for i in 0..types.length() {
+                if types.at(i.try_into().unwrap()) == "Files" {
+                    accepted = true;
+                    break;
+                }
+            }
+            accepted
+        });
+
+        let dropfield_strings_accepted = Callback::from(move |event: DragEvent| {
+            let types = event.data_transfer().unwrap().types();
+            let mut accepted = false;
+            for i in 0..types.length() {
+                if types.at(i.try_into().unwrap()) == "text/plain" {
+                    accepted = true;
+                    break;
+                }
+            }
+            accepted
+        });
+
         html! {
-            <div>
-                <Indicator dragging={self.is_dragging}>
-                    <DropField />
-                </Indicator>
-                <Draggable {drag} />
+            <>
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-6">
+                        <DropField accepting={dropfield_strings_accepted} />
+                        <Draggable {drag} />
+                    </div>  
+                    <div class="col-md-6">
+                        <Indicator dragging={self.is_dragging}>
+                            <DropField accepting={dropfield_files_accepted} />
+                        </Indicator>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <p>{"This is the third div with full width"}</p>
+                    </div>
+                </div>
             </div>
+            </>
         }
     }
 }
