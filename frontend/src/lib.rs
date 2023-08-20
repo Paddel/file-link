@@ -3,16 +3,17 @@ use yew::prelude::{html, function_component, Html};
 use yew_router::prelude::{BrowserRouter, Switch};
 
 mod components;
+mod pages;
 mod web_rtc_manager;
 
-use components::Route;
+use pages::Route;
 
 
 #[function_component]
 fn App() -> Html {
     html! {
         <BrowserRouter>
-            <Switch<Route> render={components::switch} />
+            <Switch<Route> render={pages::switch} />
         </BrowserRouter>
     }
 }

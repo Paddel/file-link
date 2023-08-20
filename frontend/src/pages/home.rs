@@ -20,14 +20,13 @@ pub fn Home() -> Html {
     // };
 
     let navigator = use_navigator().unwrap();
-    let onclick = Callback::from(move |_| navigator.push(&Route::Send));
 
     html! {
         <div>
             // <button {onclick}>{ "+1" }</button>
             // <p>{ *counter }</p>
             // <br/>
-            <button {onclick}>{ "send" }</button>
+            <button onclick={Callback::from(move |_| navigator.push(&Route::Send))}>{ "send" }</button>
         </div>
     }
 }

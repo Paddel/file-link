@@ -27,6 +27,7 @@ zstd = { path = "zstd", version = "=0.10.1", default-features = false }
 [dependencies.web-sys]
 version = "0.3.64"
 features = [
+  'DataTransfer',
   'Document',
   'Element',
   'HtmlElement',

@@ -1,7 +1,8 @@
 use once_cell::sync::Lazy;
-use rocket::fs::{FileServer, NamedFile};
-use rocket::routes;
 use std::path::PathBuf;
+
+use rocket::fs::{FileServer, NamedFile};
+use rocket::{catch, catchers};
 use tokio::runtime::Runtime;
 
 mod encryption;
@@ -12,7 +13,7 @@ mod web_interface;
 const BASE_PATH: &str = "./public/static/";
 static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(BASE_PATH).join("index.html"));
 
-#[rocket::get("/")]
+#[catch(default)]
 pub async fn index() -> Option<NamedFile> {
     NamedFile::open(&*INDEX_PATH).await.ok()
 }
@@ -22,8 +23,8 @@ fn main() {
     rt.block_on(async {
         networking::initialize_networking();
         rocket::build()
-            .mount("/", routes![index])
             .mount("/public", FileServer::from("./public"))
+            .register("/", catchers![index])
             .launch()
             .await
             .unwrap();
