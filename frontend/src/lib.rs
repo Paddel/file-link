@@ -4,6 +4,11 @@ use yew_router::prelude::{BrowserRouter, Switch, use_navigator};
 
 use pages::Route;
 
+mod components;
+mod file_tag;
+mod pages;
+mod web_rtc_manager;
+
 #[function_component]
 pub fn Header() -> Html {
     let navigator = use_navigator().unwrap();
@@ -19,11 +24,6 @@ pub fn Header() -> Html {
         </div>
     }
 }
-
-mod components;
-mod file_tag;
-mod pages;
-mod web_rtc_manager;
 
 #[function_component]
 fn App() -> Html {

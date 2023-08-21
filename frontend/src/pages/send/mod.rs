@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use yew::{Callback, Context, ContextProvider, Component, Html, html};
 use web_sys::console;
@@ -10,6 +12,7 @@ use drop_receiver::DropReceiver;
 
 use crate::file_tag::FileTag;
 use crate::components::file_list::{FileList, FileListItem};
+use crate::web_rtc_manager::{CallbackType, NetworkManager, WebRtcManager};
 
 mod file_item;
 mod drop_files;
@@ -30,6 +33,7 @@ pub enum Msg {
 pub struct Send {
     state: Rc<PageState>,
     files: HashMap<String, FileListItem>,
+    web_rtc_manager: Rc<RefCell<WebRtcManager>>,
 }
 
 impl Component for Send {
@@ -40,8 +44,14 @@ impl Component for Send {
     fn create(ctx: &Context<Self>) -> Self {
         let on_drag = ctx.link().callback(Msg::Drag);
         let state = Rc::new(PageState{is_dragging: false, on_drag});
+        let callback: Arc<Box<dyn Fn(CallbackType)>> = Arc::new(Box::new(|_type: CallbackType| {
+            // Your logic here
+        }));
+        
         Send {
-            state, files: HashMap::new()
+            state,
+            files: HashMap::new(),
+            web_rtc_manager: WebRtcManager::new(callback),
         }
     }
 
