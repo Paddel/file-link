@@ -5,10 +5,12 @@ use rocket::fs::{FileServer, NamedFile};
 use rocket::{catch, catchers};
 use tokio::runtime::Runtime;
 
+mod web_interface;
+use rocket::Config;
+
 mod encryption;
 mod networking;
 mod util;
-mod web_interface;
 
 const BASE_PATH: &str = "./public/static/";
 static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(BASE_PATH).join("index.html"));
@@ -19,10 +21,17 @@ pub async fn index() -> Option<NamedFile> {
 }
 
 fn main() {
+    let config = Config {
+        address: "0.0.0.0".parse().unwrap(),
+        port: 8000,
+        ..Config::default()
+    };
+
+    
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
         networking::initialize_networking();
-        rocket::build()
+        rocket::custom(config)
             .mount("/public", FileServer::from("./public"))
             .register("/", catchers![index])
             .launch()

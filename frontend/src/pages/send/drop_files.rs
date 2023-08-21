@@ -1,13 +1,10 @@
 use std::collections::HashMap;
 
 use yew::prelude::*;
-use web_sys::{console, FileList, File, HtmlInputElement};
+use web_sys::{FileList, HtmlInputElement};
 
-#[derive(Properties, PartialEq)]
-pub struct Props {
-    // pub drop: Callback<bool>,
-    pub accepting: Callback<DragEvent, bool>,
-}
+use super::file_item::FileItem;
+use crate::file_tag::FileTag;
 
 pub enum Msg {
     DragOver(DragEvent),
@@ -16,15 +13,15 @@ pub enum Msg {
     PickFile,
     FilesSelected,
 }
-pub struct DropField {
+pub struct DropFiles {
     hovering: bool,
-    files: HashMap<String, File>,
     file_input_ref: NodeRef,
+    files: HashMap<String, FileTag>,
 }
 
-impl Component for DropField {
+impl Component for DropFiles {
     type Message = Msg;
-    type Properties = Props;
+    type Properties = ();
 
     fn create(_: &Context<Self>) -> Self {
         Self {
@@ -34,19 +31,20 @@ impl Component for DropField {
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::DragOver(event) => {
-                if ctx.props().accepting.emit(event) {return false;}
+                if !Self::accepting(event) {return false;}
                 self.hovering = true;
             }
             Msg::DragLeave(event) => {
-                if ctx.props().accepting.emit(event) {return false;}
+                if !Self::accepting(event) {return false;}
                 self.hovering = false;
             }
             Msg::Drop(event) => {
-                if ctx.props().accepting.emit(event.clone()) {return false;}
+                if !Self::accepting(event.clone()) {return false;}
                 self.hovering = false;
+
                 let files: FileList = event.data_transfer().unwrap().files().unwrap();
                 self.handle_files(files);
             }
@@ -66,6 +64,9 @@ impl Component for DropField {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let mut class = "drop-field drop-field-files".to_string();
+        class += if self.hovering { " drop-field-hovering" } else { "" };
+
         let drag_over: Callback<DragEvent> = ctx.link().callback(|event: DragEvent| {
             event.prevent_default();
             Msg::DragOver(event)
@@ -78,15 +79,16 @@ impl Component for DropField {
         });
 
         html! {
+            <>
             <span>
                 <div
-                    class={if self.hovering { "drop-field hovering" } else { "drop-field" }}
+                    {class}
                     ondragover={drag_over}
                     ondragleave={drag_leave}
                     ondrop={drop}
                     onclick={ctx.link().callback(|_| Msg::PickFile)}
                 >
-                    { "Drop here " }{self.files.len()}
+                    <p>{"Drop files here"}</p>
                 </div>
                 <input
                     type="file"
@@ -95,24 +97,55 @@ impl Component for DropField {
                     multiple=true
                     onchange={ctx.link().callback(|_| Msg::FilesSelected)}
                 />
+                <div>
+                    {
+                        self.files.clone().into_iter().map(|item| {
+                            let (key, tag) = item;
+                            html! { 
+                                    <div {key}>
+                                        <FileItem tag={tag.clone()}>
+                                            <div class="drop-field-file-item">
+                                                <p>
+                                                { format!("{} - {}", tag.name(), tag.blob().size()) }
+                                                </p>
+                                            </div>
+                                        </FileItem>
+                                    </div>
+                                }
+                        }).collect::<Html>()
+                    }
+                </div>
             </span>
+            </>
         }
     }
 }
 
-impl DropField {
+impl DropFiles {
     fn handle_files(&mut self, files: FileList) {
         for i in 0..files.length() {
             if let Some(file) = files.item(i) {
                 let file_name = file.name();
     
                 if !self.files.contains_key(&file_name) {
-                    self.files.insert(file_name.clone(), file);
+                    self.files.insert(file_name.clone(), FileTag::new(file));
                     web_sys::console::log_1(&format!("File name: {}", file_name).into());
                 } else {
                     web_sys::console::log_1(&format!("File name: {} already exists", file_name).into());
                 }
             }
         }
+    }
+
+    fn accepting(event: DragEvent) -> bool {
+        let types = event.data_transfer().unwrap().types();
+        let mut accepted = false;
+        for i in 0..types.length() {
+            if types.at(i.try_into().unwrap()) == "Files" {
+                accepted = true;
+                break;
+            }
+        }
+        accepted
     }
 }

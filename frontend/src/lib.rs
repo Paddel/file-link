@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 use yew::prelude::{html, function_component, Html};
 use yew_router::prelude::{BrowserRouter, Switch};
 
-mod components;
+mod file_tag;
 mod pages;
 mod web_rtc_manager;
 
