@@ -5,28 +5,12 @@ use super::Route;
 
 #[function_component]
 pub fn Home() -> Html {
-    // let counter = use_state(|| 0);
-    // let onclick = {
-    //     let counter = counter.clone();
-    //     move |_| {
-    //         let value = *counter + 1;
-    //         counter.set(value);
-    //     }
-    // };
-
-    // let onrequestapi = {
-    //     move |_| {
-    //     }
-    // };
-
     let navigator = use_navigator().unwrap();
-
+    let nav_clone = navigator.clone();
     html! {
         <div>
-            // <button {onclick}>{ "+1" }</button>
-            // <p>{ *counter }</p>
-            // <br/>
             <button onclick={Callback::from(move |_| navigator.push(&Route::Send))}>{ "send" }</button>
+            <button onclick={Callback::from(move |_| nav_clone.push(&Route::Receive))}>{ "receive" }</button>
         </div>
     }
 }

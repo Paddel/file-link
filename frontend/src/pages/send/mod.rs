@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use yew::{Callback, Context, ContextProvider, Component, Html, html};
@@ -6,6 +7,9 @@ use web_sys::console;
 use file_item::Indicator;
 use drop_files::DropFiles;
 use drop_receiver::DropReceiver;
+
+use crate::file_tag::FileTag;
+use crate::components::file_list::{FileList, FileListItem};
 
 mod file_item;
 mod drop_files;
@@ -20,10 +24,12 @@ pub struct PageState {
 pub enum Msg {
     Drag(bool),
     Drop(String),
+    AddFile(FileListItem),
 }
 
 pub struct Send {
     state: Rc<PageState>,
+    files: HashMap<String, FileListItem>,
 }
 
 impl Component for Send {
@@ -34,7 +40,9 @@ impl Component for Send {
     fn create(ctx: &Context<Self>) -> Self {
         let on_drag = ctx.link().callback(Msg::Drag);
         let state = Rc::new(PageState{is_dragging: false, on_drag});
-        Send {state}
+        Send {
+            state, files: HashMap::new()
+        }
     }
 
     fn update(&mut self, _: &Context<Self>, msg: Self::Message) -> bool {
@@ -45,6 +53,9 @@ impl Component for Send {
             Msg::Drop(id) => {
                 console::log_1(&format!("dropped: {}", id).into());
             }
+            Msg::AddFile(file) => {
+                self.files.insert(file.tag.uuid().to_string(), file);
+            }
         }
         true
     }
@@ -54,25 +65,44 @@ impl Component for Send {
         let page_state = self.state.clone();
         html! {
             <>
-            <ContextProvider<Rc<PageState>> context={page_state}>
-                <div class="container">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <DropFiles />
-                        </div>  
-                        <div class="col-md-6">
-                            <Indicator>
-                                <DropReceiver drop={ctx.link().callback(|id| Msg::Drop(id))} />
-                            </Indicator>
+                <ContextProvider<Rc<PageState>> context={page_state}>
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <DropFiles />
+                            </div>
+                            <div class="col-md-6">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <input type="text" readonly={true} value="Loading.." />
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <Indicator>
+                                            <DropReceiver drop={ctx.link().callback(|id| Msg::Drop(id))} />
+                                        </Indicator>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                        <FileList>
+                        {
+                            self.files.clone().into_iter().enumerate().map(|(index, (_, file))| {
+                                html! {
+                                    <>
+                                    <td>{index}</td>
+                                    <td>{file.tag.name()}</td>
+                                    <td>{file.tag.blob().size()}</td>
+                                    <td>{format!("{:?}", file.state)}</td>
+                                    <td>{"Waiting for Receiver"}</td>
+                                    </>
+                                    }
+                            }).collect::<Html>()
+                        }
+                        </FileList>
                     </div>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <p>{"This is the third div with full width"}</p>
-                        </div>
-                    </div>
-                </div>
-            </ContextProvider<Rc<PageState>>>
+                </ContextProvider<Rc<PageState>>>
             </>
         }
     }
