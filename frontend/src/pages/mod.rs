@@ -1,7 +1,6 @@
 use yew::prelude::{html, Html};
 use yew_router::prelude::Routable;
 
-mod chat_model;
 mod home;
 mod receive;
 mod send;

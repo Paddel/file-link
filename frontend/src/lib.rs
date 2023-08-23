@@ -7,10 +7,11 @@ use pages::Route;
 mod components;
 mod file_tag;
 mod pages;
-mod web_rtc_manager;
+mod services;
+mod ws_macros;
 
-#[function_component]
-pub fn Header() -> Html {
+#[function_component(Header)]
+pub fn header() -> Html {
     let navigator = use_navigator().unwrap();
 
     html! {
@@ -25,14 +26,14 @@ pub fn Header() -> Html {
     }
 }
 
-#[function_component]
-fn App() -> Html {
+#[function_component(App)]
+fn app() -> Html {
     html! {
         <BrowserRouter>
-        <Header />
-        <div class="container p-3">
-            <Switch<Route> render={pages::switch} />
-        </div>
+            <Header />
+            <div class="container p-3">
+                <Switch<Route> render={pages::switch} />
+            </div>
         </BrowserRouter>
     }
 }

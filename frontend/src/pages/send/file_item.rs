@@ -3,10 +3,10 @@ use std::rc::Rc;
 use yew::prelude::*;
 
 use crate::file_tag::FileTag;
-use super::PageState;
+use super::PageContext;
 
 pub enum IndicatorMsg {
-    ContextChanged(Rc<PageState>),
+    ContextChanged(Rc<PageContext>),
 }
 
 #[derive(PartialEq, Properties)]
@@ -15,8 +15,8 @@ pub struct IndicatorProps {
 }
 
 pub struct Indicator {
-    state: Rc<PageState>,
-    _listener: ContextHandle<Rc<PageState>>,
+    context: Rc<PageContext>,
+    _listener: ContextHandle<Rc<PageContext>>,
 }
 
 impl Component for Indicator {
@@ -24,18 +24,18 @@ impl Component for Indicator {
     type Properties = IndicatorProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (state, _listener) = ctx
+        let (context, _listener) = ctx
             .link()
-            .context::<Rc<PageState>>(ctx.link().callback(IndicatorMsg::ContextChanged))
+            .context::<Rc<PageContext>>(ctx.link().callback(IndicatorMsg::ContextChanged))
             .expect("context to be set");
 
-        Self { state, _listener }
+        Self { context, _listener }
     }
 
     fn update(&mut self, _: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            IndicatorMsg::ContextChanged(state) => {
-                self.state = state;
+            IndicatorMsg::ContextChanged(context) => {
+                self.context = context;
                 true
             }
         }
@@ -43,7 +43,7 @@ impl Component for Indicator {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let mut class = "drag-indicator".to_string();
-        class += if self.state.is_dragging { " glow" } else { "" };
+        class += if self.context.is_dragging { " glow" } else { "" };
 
         html! {
             <div {class}>
@@ -60,12 +60,12 @@ pub struct FileItemProps {
 }
 
 pub struct FileItem {
-    state: Rc<PageState>,
-    _listener: ContextHandle<Rc<PageState>>,
+    context: Rc<PageContext>,
+    _listener: ContextHandle<Rc<PageContext>>,
 }
 
 pub enum FileItemMsg {
-    ContextChanged(Rc<PageState>),
+    ContextChanged(Rc<PageContext>),
     DragStart(DragEvent),
     DragEnd,
 }
@@ -75,28 +75,28 @@ impl Component for FileItem {
     type Properties = FileItemProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (state, _listener) = ctx
+        let (context, _listener) = ctx
             .link()
-            .context::<Rc<PageState>>(ctx.link().callback(FileItemMsg::ContextChanged))
+            .context::<Rc<PageContext>>(ctx.link().callback(FileItemMsg::ContextChanged))
             .expect("context to be set");
 
-        Self { state, _listener }
+        Self { context, _listener }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            FileItemMsg::ContextChanged(state) => {
-                self.state = state;
+            FileItemMsg::ContextChanged(context) => {
+                self.context = context;
             }
             FileItemMsg::DragStart(event) => {
-                self.state.on_drag.emit(true);
+                self.context.on_drag.emit(true);
                 event.data_transfer()
                     .unwrap()
                     .set_data("text", &ctx.props().tag.uuid().to_string())
                     .unwrap();
             }
             FileItemMsg::DragEnd => {
-                self.state.on_drag.emit(false);
+                self.context.on_drag.emit(false);
             }
         }
         true

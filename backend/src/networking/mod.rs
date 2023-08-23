@@ -55,6 +55,7 @@ fn handle_ws_connection(
     connection: Arc<connection::Connection>,
     connections: Arc<RwLock<Vec<Arc<connection::Connection>>>>,
 ) {
+    println!("New WebSocket connection: {}", connection.get_uuid());
     tokio::spawn(async move {
         while let Some(Ok(msg)) = connection.read().await {
             message_broadcast(connection.clone(), connections.clone(), msg).await;
