@@ -8,7 +8,6 @@ mod components;
 mod file_tag;
 mod pages;
 mod services;
-mod ws_macros;
 
 #[function_component(Header)]
 pub fn header() -> Html {

@@ -8,9 +8,7 @@ use tokio::runtime::Runtime;
 mod web_interface;
 use rocket::Config;
 
-mod encryption;
 mod networking;
-mod util;
 
 pub mod shared {
     use serde::{Deserialize, Serialize};
