@@ -1,5 +1,7 @@
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::{DerefMut, Deref};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -11,16 +13,19 @@ use yew::{Html, html, Callback, Context, ContextProvider, Component, function_co
 use file_item::Indicator;
 use drop_files::DropFiles;
 use drop_receiver::DropReceiver;
+use serde_json::json;
 use yew_websocket::websocket::{WebSocketTask, WebSocketService, WebSocketStatus};
 
 use crate::components::file_list::{FileList, FileListItem};
-use crate::services::web_rtc::{CallbackType, NetworkManager, WebRtcManager};
+use crate::services::web_rtc::{NetworkManager, State, ConnectionState, ConnectionString};
 use crate::ws_macros::{Json, WsResponse, WsRequest};
 
 mod file_item;
 mod drop_files;
 mod drop_receiver;
 
+include!(concat!(env!("OUT_DIR"), "/config.rs"));
+include!("../../../../shared/ws_protocol.rs");
 
 #[derive(Serialize, Deserialize)]
 struct ConnectionLinkResponse {
@@ -102,13 +107,11 @@ fn connect_link() -> HtmlResult {
 //     Err(_) => "Oops! Something went wrong. Please refresh the page".to_string(),
 // };
 
-struct WsSessionDetails(String, bool, u8);
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct PageContext {
     is_dragging: bool,
     on_drag: Callback<bool>,
-    session_start: Callback<WsSessionDetails>,
+    session_start: Callback<SessionDetails>,
 }
 
 pub enum Msg {
@@ -116,43 +119,68 @@ pub enum Msg {
     Drop(String),
     AddFile(FileListItem),
     
-    WsConnect(WsSessionDetails),
-    WsReady(Result<WsResponse, Error>),
-    WsSendData(bool),
+    WsConnect(),
+    WsOpened(),
+    WsReady(Result<SessionCode, Error>),
     WsDisconnect,
     WsLost,
+
+    NewMessage(String),
+    UpdateWebRtcState(State),
+    ResetWebRTC,
 }
 
-pub struct Send {
+pub struct Send<T: NetworkManager + 'static> {
     context: Rc<PageContext>,
     files: HashMap<String, FileListItem>,
-    web_rtc_manager: Rc<RefCell<WebRtcManager>>,
+    web_rtc_manager: Rc<RefCell<T>>,
 
     ws: Option<WebSocketTask>,
     pub ws_fetching: bool,
-    pub ws_data: Option<u32>,
+    code: String,
 }
 
-impl Component for Send {
+impl<T: NetworkManager + 'static> Component for Send<T> {
     type Message = Msg;
     type Properties = ();
      
     
     fn create(ctx: &Context<Self>) -> Self {
         let on_drag = ctx.link().callback(Msg::Drag);
-        let session_start = ctx.link().callback(|details: WsSessionDetails| Msg::WsConnect(details));
+        let session_start = ctx.link().callback(|_| Msg::WsConnect());
         let context = Rc::new(PageContext{is_dragging: false, on_drag, session_start});
-        let callback: Arc<Box<dyn Fn(CallbackType)>> = Arc::new(Box::new(|_type: CallbackType| {
-            // Your logic here
-        }));
+
+        let ctx_clone = ctx.clone();
+        // let callback: Arc<Box<dyn Fn(CallbackType)>> = Arc::new(Box::new(|cb_type: CallbackType| {
+        //     match cb_type {
+        //         CallbackType::ResetWebRTC => {
+        //             console::log_1(&format!("ResetWebRTC").into());
+        //         }
+        //         CallbackType::UpdateWebRTCState(state) => {
+        //             console::log_1(&format!("UpdateWebRTCState: {:?}", state).into());
+
+        //             if let State::Server(connection_state) = state {
+        //                 console::log_1(&format!("Server: {:?}", connection_state).into());
+        //                 // ctx.link().send_message(Msg::WRtcReady);
+
+                        
+        //                 // let offer = self.web_rtc_manager.deref().borrow_mut().create_offer();
+        //                 // console::log_1(&format!("offer: {:?}", offer).into());
+        //             }
+        //         }
+        //         CallbackType::NewMessage(blob) => {
+        //             console::log_1(&format!("NewMessage: {:?}", blob).into());
+        //         }
+        //     }
+        // }));
         
         Send {
             context,
             files: HashMap::new(),
-            web_rtc_manager: WebRtcManager::new(callback),
+            web_rtc_manager: T::new(ctx.link()),
             ws: None,
             ws_fetching: false,
-            ws_data: None,
+            code: String::new(),
         }
     }
 
@@ -170,53 +198,73 @@ impl Component for Send {
                 self.files.insert(file.tag.uuid().to_string(), file);
                 true
             }
-            Msg::WsConnect(details) => {
-                let callback = ctx.link().callback(|Json(data)| Msg::WsReady(data));
-                let notification = ctx.link().batch_callback(|status| match status {
-                    WebSocketStatus::Opened => None,
-                    WebSocketStatus::Closed | WebSocketStatus::Error => {
-                        Some(Msg::WsLost.into())
-                    }
-                });
-                let task = match WebSocketService::connect(
-                    // "wss://echo.websocket.events/",
-                    "ws://127.0.0.1:9000/",
-                    callback,
-                    notification,
-                ) {
-                    Ok(task) => Some(task),
-                    Err(_) => None,
-                };
-                self.ws = task;
+            Msg::WsConnect() => {
+                self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
+                let result: Result<(), wasm_bindgen::JsValue> = T::start_web_rtc(self.web_rtc_manager.clone());
+                console::log_1(&format!("result: {:?}", result).into());
 
+                // self.web_rtc_manager
+                //     .borrow_mut()
+                //     .set_state(State::Server(ConnectionState::new()));
+                // T::start_web_rtc(self.web_rtc_manager.clone())
+                //     .expect("Failed to start WebRTC manager");
+                // self.web_rtc_manager.borrow_mut().set_state(State::Server(ConnectionState::new()));
+                // let a: &mut Rc<RefCell<WebRtcManager>> = self.web_rtc_manager.borrow_mut();
+                // a.set_state();
+                // b.set_state();
+                // let rtc: Rc<RefCell<WebRtcManager>> = WebRtcManager::new(callback.clone());
+                
+                // self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
+                // let result: Result<(), wasm_bindgen::JsValue> = WebRtcManager::start_web_rtc(self.web_rtc_manager.clone());
+                // console::log_1(&format!("result: {:?}", result).into());
+
+                
+                
+                // self.ws_send_host(data);
                 true
             }
-            Msg::WsSendData(binary) => {
-                let request = WsRequest { value: 321 };
-                if binary {
-                    self.ws
-                        .as_mut()
-                        .unwrap()
-                        .send_binary(serde_json::to_string(&request).unwrap().into_bytes());
-                } else {
-                    self.ws
-                        .as_mut()
-                        .unwrap()
-                        .send(serde_json::to_string(&request).unwrap());
-                }
+            Msg::WsOpened() => {
+                console::log_1(&format!("ws opened").into());
+                let offer = self.web_rtc_manager.deref().borrow_mut().create_offer();
+                let data = SessionDetails::SessionHost(SessionHost{
+                    mode: "host".to_string(),
+                    offer, password: "".to_string(),
+                    compression: 9,
+                });
+                self.ws_send_host(data);
                 false
             }
             Msg::WsDisconnect => {
-                self.ws = None;
+                self.ws_disconnect();
                 true
             }
             Msg::WsLost => {
-                self.ws = None;
+                self.ws_disconnect();
                 true
             }
             Msg::WsReady(response) => {
-                self.ws_data = response.map(|data| data.value).ok();
-                console::log_1(&format!("data: {:?}", self.ws_data).into());
+                let data = response.map(|data| data).ok();
+                if data.is_some() {
+                    console::log_1(&format!("ws ready: {:?}", data).into());
+                    self.code = data.unwrap().code;
+                }
+                true
+            }
+            Msg::NewMessage(msg) => {
+                console::log_1(&format!("msg: {:?}", msg).into());
+                true
+            }
+            Msg::UpdateWebRtcState(state) => {
+                if let State::Server(connection_state) = state {
+                    if connection_state.ice_gathering_state.is_some() {
+                        console::log_1(&format!("Server: {:?}", connection_state).into());
+                        self.ws_connect(ctx);
+                    }
+                }
+                true
+            }
+            Msg::ResetWebRTC => {
+                console::log_1(&format!("ResetWebRTC").into());
                 true
             }
         }
@@ -239,7 +287,8 @@ impl Component for Send {
                                 //     <Content />
                                 // </Suspense>
                                     // <input type="text" readonly={true} value={self.invite_link} />
-                                    <button onclick={ctx.link().callback(|_| Msg::WsConnect(WsSessionDetails("".to_string(), true, 9)))}>{ "connect" }</button>
+                                    <button onclick={ctx.link().callback(|_| Msg::WsConnect())}>{ "connect" }</button>
+                                    <p>{&self.code}</p>
                                 </div>
                             </div>
                             <div class="row">
@@ -269,5 +318,42 @@ impl Component for Send {
                 </div>
             </ContextProvider<Rc<PageContext>>>
         }
+    }
+}
+
+impl<T: NetworkManager + 'static> Send<T> {
+    fn ws_connect(&mut self, ctx: &Context<Self>) {
+        
+        let callback = ctx.link().callback(|Json(data)| Msg::WsReady(data));
+        let notification: Callback<WebSocketStatus> = ctx.link().batch_callback(move |status| match status {
+            WebSocketStatus::Opened => {Some(Msg::WsOpened().into())},
+            WebSocketStatus::Closed | WebSocketStatus::Error => {
+                console::log_1(&format!("ws close: {:?}", status).into());
+                Some(Msg::WsLost.into())
+            }
+        });
+        let task = match WebSocketService::connect(
+            WEBSOCKET_ADDRESS,
+            callback,
+            notification,
+        ) {
+            Ok(task) => Some(task),
+            Err(_) => None,
+        };
+        self.ws = task;
+        console::log_1(&format!("ws: {:?}", self.ws).into());
+    }
+
+    fn ws_disconnect(&mut self) {
+        self.ws = None;
+    }
+
+    fn ws_send_host(&mut self, data: SessionDetails) {
+        // self.ws.borrow_mut().unwrap().send(serde_json::to_string(&data).unwrap());
+        self.ws
+            .as_mut()
+            .unwrap()
+            .send(serde_json::to_string(&data).unwrap());
+        console::log_1(&format!("ws2: {:?}", self.ws).into());
     }
 }

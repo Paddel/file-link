@@ -12,6 +12,11 @@ mod encryption;
 mod networking;
 mod util;
 
+pub mod shared {
+    use serde::{Deserialize, Serialize};
+    include!("../../shared/ws_protocol.rs");
+}
+
 const BASE_PATH: &str = "./public/static/";
 static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(BASE_PATH).join("index.html"));
 
@@ -30,7 +35,7 @@ fn main() {
     
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
-        networking::initialize_networking();
+        networking::NetworkManager::initialize_networking();
         rocket::custom(config)
             .mount("/public", FileServer::from("./public"))
             .register("/", catchers![index])
