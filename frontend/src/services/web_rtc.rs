@@ -18,11 +18,19 @@ use web_sys::{
 };
 
 use yew::html::Scope;
+use yew::callback::Callback;
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
 type SingleArgJsFn = Box<dyn FnMut(JsValue)>;
 
 const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum WebRtcMessage {
+    Message(String),
+    UpdateState(State),
+    Reset,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConnectionString {
@@ -71,7 +79,7 @@ pub struct IceCandidate {
 }
 
 pub trait NetworkManager {
-    fn new(link: &Scope<Send<Self>>) -> Rc<RefCell<Self>>
+    fn new(callback: Callback<WebRtcMessage>) -> Rc<RefCell<Self>>
     where
         Self: Sized;
     fn send_message(&self, message_content: &str);
@@ -86,24 +94,24 @@ pub trait NetworkManager {
 }
 
 pub struct WebRTCManager {
+    callback: Callback<WebRtcMessage>,
     state: State,
     rtc_peer_connection: Option<RtcPeerConnection>,
     data_channel: Option<RtcDataChannel>,
     exit_offer_or_answer_early: bool,
     ice_candidates: Vec<IceCandidate>,
     offer: Option<String>,
-    parent_link: Scope<Send<Self>>,
 }
 
 impl NetworkManager for WebRTCManager {
-    fn new(link: &Scope<Send<Self>>) -> Rc<RefCell<Self>> {
+    fn new(callback: Callback<WebRtcMessage>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(WebRTCManager {
+            callback,
             state: State::Default,
             rtc_peer_connection: None,
             data_channel: None,
             ice_candidates: Vec::new(),
             offer: None,
-            parent_link: link.clone(),
             exit_offer_or_answer_early: false,
         }))
     }
@@ -286,8 +294,8 @@ impl NetworkManager for WebRTCManager {
 
             web_rtc_manager_rc_clone
                 .borrow()
-                .parent_link
-                .send_message(Msg::ResetWebRTC);
+                .callback
+                .emit(WebRtcMessage::Reset);
         }) as SingleArgJsFn);
 
         let connection_string = Rc::new(connection_string);
@@ -565,8 +573,8 @@ impl WebRTCManager {
 
             web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::UpdateWebRtcState(web_rtc_state));
+                .callback
+                .emit(WebRtcMessage::UpdateState(web_rtc_state));
         }) as SingleArgJsFn)
     }
 
@@ -579,8 +587,8 @@ impl WebRTCManager {
 
             web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::NewMessage(msg_content));
+                .callback
+                .emit(WebRtcMessage::Message(msg_content.clone()));
         }) as SingleArgJsFn)
     }
 
@@ -614,8 +622,8 @@ impl WebRTCManager {
 
             web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::UpdateWebRtcState(web_rtc_state));
+                .callback
+                .emit(WebRtcMessage::UpdateState(web_rtc_state));
         }) as SingleArgJsFn)
     }
 
@@ -648,8 +656,8 @@ impl WebRTCManager {
 
             web_rtc_manager
                 .borrow()
-                .parent_link
-                .send_message(Msg::UpdateWebRtcState(web_rtc_state));
+                .callback
+                .emit(WebRtcMessage::UpdateState(web_rtc_state));
         }) as SingleArgJsFn)
     }
 

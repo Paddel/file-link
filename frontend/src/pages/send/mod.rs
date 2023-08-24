@@ -17,7 +17,7 @@ use serde_json::json;
 use yew_websocket::websocket::{WebSocketTask, WebSocketService, WebSocketStatus};
 
 use crate::components::file_list::{FileList, FileListItem};
-use crate::services::web_rtc::{NetworkManager, State, ConnectionState, ConnectionString};
+use crate::services::web_rtc::{NetworkManager, State, ConnectionState, ConnectionString, WebRtcMessage};
 use crate::ws_macros::{Json, WsResponse, WsRequest};
 
 mod file_item;
@@ -125,9 +125,7 @@ pub enum Msg {
     WsDisconnect,
     WsLost,
 
-    NewMessage(String),
-    UpdateWebRtcState(State),
-    ResetWebRTC,
+    CallbackWebRTC(WebRtcMessage),
 }
 
 pub struct Send<T: NetworkManager + 'static> {
@@ -146,38 +144,15 @@ impl<T: NetworkManager + 'static> Component for Send<T> {
      
     
     fn create(ctx: &Context<Self>) -> Self {
+        let callback_webrtc = ctx.link().callback(Msg::CallbackWebRTC);
         let on_drag = ctx.link().callback(Msg::Drag);
         let session_start = ctx.link().callback(|_| Msg::WsConnect());
         let context = Rc::new(PageContext{is_dragging: false, on_drag, session_start});
-
-        let ctx_clone = ctx.clone();
-        // let callback: Arc<Box<dyn Fn(CallbackType)>> = Arc::new(Box::new(|cb_type: CallbackType| {
-        //     match cb_type {
-        //         CallbackType::ResetWebRTC => {
-        //             console::log_1(&format!("ResetWebRTC").into());
-        //         }
-        //         CallbackType::UpdateWebRTCState(state) => {
-        //             console::log_1(&format!("UpdateWebRTCState: {:?}", state).into());
-
-        //             if let State::Server(connection_state) = state {
-        //                 console::log_1(&format!("Server: {:?}", connection_state).into());
-        //                 // ctx.link().send_message(Msg::WRtcReady);
-
-                        
-        //                 // let offer = self.web_rtc_manager.deref().borrow_mut().create_offer();
-        //                 // console::log_1(&format!("offer: {:?}", offer).into());
-        //             }
-        //         }
-        //         CallbackType::NewMessage(blob) => {
-        //             console::log_1(&format!("NewMessage: {:?}", blob).into());
-        //         }
-        //     }
-        // }));
         
         Send {
             context,
             files: HashMap::new(),
-            web_rtc_manager: T::new(ctx.link()),
+            web_rtc_manager: T::new(callback_webrtc),
             ws: None,
             ws_fetching: false,
             code: String::new(),
@@ -202,25 +177,6 @@ impl<T: NetworkManager + 'static> Component for Send<T> {
                 self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
                 let result: Result<(), wasm_bindgen::JsValue> = T::start_web_rtc(self.web_rtc_manager.clone());
                 console::log_1(&format!("result: {:?}", result).into());
-
-                // self.web_rtc_manager
-                //     .borrow_mut()
-                //     .set_state(State::Server(ConnectionState::new()));
-                // T::start_web_rtc(self.web_rtc_manager.clone())
-                //     .expect("Failed to start WebRTC manager");
-                // self.web_rtc_manager.borrow_mut().set_state(State::Server(ConnectionState::new()));
-                // let a: &mut Rc<RefCell<WebRtcManager>> = self.web_rtc_manager.borrow_mut();
-                // a.set_state();
-                // b.set_state();
-                // let rtc: Rc<RefCell<WebRtcManager>> = WebRtcManager::new(callback.clone());
-                
-                // self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
-                // let result: Result<(), wasm_bindgen::JsValue> = WebRtcManager::start_web_rtc(self.web_rtc_manager.clone());
-                // console::log_1(&format!("result: {:?}", result).into());
-
-                
-                
-                // self.ws_send_host(data);
                 true
             }
             Msg::WsOpened() => {
@@ -250,21 +206,23 @@ impl<T: NetworkManager + 'static> Component for Send<T> {
                 }
                 true
             }
-            Msg::NewMessage(msg) => {
-                console::log_1(&format!("msg: {:?}", msg).into());
-                true
-            }
-            Msg::UpdateWebRtcState(state) => {
-                if let State::Server(connection_state) = state {
-                    if connection_state.ice_gathering_state.is_some() {
-                        console::log_1(&format!("Server: {:?}", connection_state).into());
-                        self.ws_connect(ctx);
+            Msg::CallbackWebRTC(msg) => {
+                match msg {
+                    WebRtcMessage::Message(blob) => {
+                        console::log_1(&format!("Message: {:?}", blob).into());
+                    }
+                    WebRtcMessage::UpdateState(state) => {
+                        if let State::Server(connection_state) = state {
+                            if connection_state.ice_gathering_state.is_some() {
+                                console::log_1(&format!("Server: {:?}", connection_state).into());
+                                self.ws_connect(ctx);
+                            }
+                        };
+                    }
+                    WebRtcMessage::Reset => {
+                        console::log_1(&format!("Reset").into());
                     }
                 }
-                true
-            }
-            Msg::ResetWebRTC => {
-                console::log_1(&format!("ResetWebRTC").into());
                 true
             }
         }
@@ -323,13 +281,12 @@ impl<T: NetworkManager + 'static> Component for Send<T> {
 
 impl<T: NetworkManager + 'static> Send<T> {
     fn ws_connect(&mut self, ctx: &Context<Self>) {
-        
         let callback = ctx.link().callback(|Json(data)| Msg::WsReady(data));
         let notification: Callback<WebSocketStatus> = ctx.link().batch_callback(move |status| match status {
-            WebSocketStatus::Opened => {Some(Msg::WsOpened().into())},
+            WebSocketStatus::Opened => {Some(WebRtcMessage::Reset)},
             WebSocketStatus::Closed | WebSocketStatus::Error => {
                 console::log_1(&format!("ws close: {:?}", status).into());
-                Some(Msg::WsLost.into())
+                Some(WebRtcMessage::Reset)
             }
         });
         let task = match WebSocketService::connect(
