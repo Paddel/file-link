@@ -1,7 +1,5 @@
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::pages::send::{Msg, Send};
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
@@ -17,7 +15,6 @@ use web_sys::{
     RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSessionDescriptionInit,
 };
 
-use yew::html::Scope;
 use yew::callback::Callback;
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
@@ -78,21 +75,6 @@ pub struct IceCandidate {
     sdp_m_line_index: u16,
 }
 
-pub trait NetworkManager {
-    fn new(callback: Callback<WebRtcMessage>) -> Rc<RefCell<Self>>
-    where
-        Self: Sized;
-    fn send_message(&self, message_content: &str);
-    fn get_state(&self) -> State;
-    fn set_state(&mut self, new_state: State);
-    fn get_offer(&self) -> Option<String>;
-    fn get_ice_candidates(&self) -> Vec<IceCandidate>;
-    fn validate_offer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> Result<(), OfferError>;
-    fn validate_answer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> Result<(), OfferError>;
-    fn start_web_rtc(web_rtc_manager: Rc<RefCell<Self>>) -> Result<(), JsValue>;
-    fn create_offer(&self) -> String;
-}
-
 pub struct WebRTCManager {
     callback: Callback<WebRtcMessage>,
     state: State,
@@ -103,8 +85,8 @@ pub struct WebRTCManager {
     offer: Option<String>,
 }
 
-impl NetworkManager for WebRTCManager {
-    fn new(callback: Callback<WebRtcMessage>) -> Rc<RefCell<Self>> {
+impl WebRTCManager {
+    pub fn new(callback: Callback<WebRtcMessage>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(WebRTCManager {
             callback,
             state: State::Default,
@@ -116,7 +98,7 @@ impl NetworkManager for WebRTCManager {
         }))
     }
 
-    fn send_message(&self, message_content: &str) {
+    pub fn send_message(&self, message_content: &str) {
         self.data_channel
             .as_ref()
             .expect("must have a data channel")
@@ -130,11 +112,11 @@ impl NetworkManager for WebRTCManager {
         self.state.clone()
     }
 
-    fn set_state(&mut self, new_state: State) {
+    pub fn set_state(&mut self, new_state: State) {
         self.state = new_state;
     }
 
-    fn get_offer(&self) -> Option<String> {
+    pub fn get_offer(&self) -> Option<String> {
         self.offer.clone()
     }
 
@@ -142,7 +124,7 @@ impl NetworkManager for WebRTCManager {
         self.ice_candidates.clone()
     }
 
-    fn validate_offer(
+    pub fn validate_offer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         str: &str,
     ) -> Result<(), OfferError> {
@@ -153,6 +135,7 @@ impl NetworkManager for WebRTCManager {
         }
 
         let connection_string = connection_string.ok().unwrap();
+        console::log_1(&format!("connection_string: {:?}", connection_string).into());
 
         let remote_description_js_value: JsValue =
             JSON::parse(&connection_string.offer).expect("Expected valid json");
@@ -257,7 +240,7 @@ impl NetworkManager for WebRTCManager {
         Ok(())
     }
 
-    fn validate_answer(
+    pub fn validate_answer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         str: &str,
     ) -> Result<(), OfferError> {
@@ -319,7 +302,7 @@ impl NetworkManager for WebRTCManager {
         Ok(())
     }
 
-    fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> Result<(), JsValue> {
+    pub fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> Result<(), JsValue> {
         let rtc_peer_connection = {
             let ice_servers = Array::new();
             {
@@ -470,7 +453,7 @@ impl NetworkManager for WebRTCManager {
         Ok(())
     }
 
-    fn create_offer(&self) -> String {
+    pub fn create_encoded_offer(&self) -> String {
         let connection_string = ConnectionString {
             offer: self.get_offer().expect("no offer yet"),
             ice_candidates: self.get_ice_candidates(),
@@ -480,10 +463,7 @@ impl NetworkManager for WebRTCManager {
 
         general_purpose::STANDARD.encode(serialized)
     }
-}
 
-impl WebRTCManager {
-    // TODO : handle error when adding ice_candidate
     fn set_candidates(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         connection_string: &ConnectionString,
