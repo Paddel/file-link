@@ -43,7 +43,6 @@ pub struct Send {
     files: HashMap<String, FileListItem>,
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     web_rtc_state: ConnectionState,
-    web_rtc_ready: bool,
     web_socket: Option<WsConnection>,
     code: String,
 }
@@ -62,7 +61,6 @@ impl Component for Send {
             files: HashMap::new(),
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRTC)),
             web_rtc_state: ConnectionState::new(),
-            web_rtc_ready: false,
             web_socket: None,
             code: String::new(),
         }
@@ -103,7 +101,6 @@ impl Component for Send {
                                 if let Some(state) = connection_state.ice_gathering_state {
                                     if state == web_sys::RtcIceGatheringState::Complete {
                                         self.ws_connect(ctx);
-                                        self.web_rtc_ready = true;
                                     }
                                 }
                             }
@@ -120,7 +117,6 @@ impl Component for Send {
                             }
 
                             self.web_rtc_state = connection_state;
-                            /*self.web_rtc_manager.deref().borrow_mut().send_message("test"); */
                         };
                     }
                     WebRtcMessage::Reset => {
@@ -188,23 +184,7 @@ impl Component for Send {
                             <DropFiles />
                         </div>
                         <div class="col-md-6">
-                            <div class="row">
-                                <div class="col-md-12">
-                                // <Suspense {fallback}>
-                                //     <Content />
-                                // </Suspense>
-                                    // <input type="text" readonly={true} value={self.invite_link} />
-                                    <button onclick={ctx.link().callback(|_| Msg::SessionStart)}>{ "connect" }</button>
-                                    <p>{&self.code}</p>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-12">
-                                    <Indicator>
-                                        <DropReceiver drop={ctx.link().callback(|id| Msg::Drop(id))} />
-                                    </Indicator>
-                                </div>
-                            </div>
+                            {self.view_networking(ctx)}
                         </div>
                     </div>
                     <FileList>
@@ -247,5 +227,62 @@ impl Send {
             .unwrap()
             .send_text(serde_json::to_string(&data).unwrap());
         console::log_1(&format!("ws2:").into());
+    }
+
+    fn view_networking(&self, ctx: &Context<Self>) -> Html {
+        let section_websocket = if self.web_socket.is_some()
+        {
+            html! {
+                <>
+                    <p>{&self.code}</p>
+                </>
+            }
+        }
+        else {
+            html! {
+                <>
+                <div class="col-md-12">
+                    <button onclick={ctx.link().callback(|_| Msg::SessionStart)}>{ "connect" }</button>
+                </div>
+                </>
+            }
+        };
+
+        let section_webrtc = if self.web_rtc_state.data_channel_state.is_some() &&
+            self.web_rtc_state.data_channel_state.unwrap() == web_sys::RtcDataChannelState::Open {
+            html! {
+                <>
+                    <div class="col-md-12">
+                        <p>{ "Connected" }</p>
+                    </div>
+                </>
+            }
+        }
+        else {
+            html! {
+                <>
+                    <div class="col-md-12">
+                        <p>{ "Not Connected" }</p>
+                    </div>
+                </>
+            }
+        };
+
+
+        html! {
+            <>
+                <div class="row">
+                    {section_websocket}
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        {section_webrtc}
+                        <Indicator>
+                            <DropReceiver drop={ctx.link().callback(|id| Msg::Drop(id))} />
+                        </Indicator>
+                    </div>
+                </div>
+            </>
+        }
     }
 }

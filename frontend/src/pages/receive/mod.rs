@@ -32,7 +32,7 @@ pub struct ReceiveProps {
 
 pub struct Receive {
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
-    web_rtc_ready: bool,
+    web_rtc_state: ConnectionState,
     web_socket: Option<WsConnection>,
     code: String,
     password: String,
@@ -47,7 +47,7 @@ impl Component for Receive {
     fn create(ctx: &Context<Self>) -> Self {
         Self {
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
-            web_rtc_ready: false,
+            web_rtc_state: ConnectionState::new(),
             web_socket: None,
             code: ctx.props().code.clone(),
             password: String::new(),
@@ -71,29 +71,28 @@ impl Component for Receive {
             Msg::CallbackWebRtc(msg) => {
                 match msg {
                     WebRtcMessage::Message(data) => {
-                        console::log_1(&format!("WebRtcMessage::Message").into());
+                        console::log_1(&format!("WebRtcMessage::Message {}", data).into());
                     }
                     WebRtcMessage::UpdateState(state) => {
-                        console::log_1(&format!("WebRtcMessage::UpdateState {:?}", state).into());
-                        if self.web_rtc_ready == true {
-                            return false;
-                        }
-
-                        if let State::Client(connection_state) = state {
-                            let state: web_sys::RtcIceGatheringState = connection_state.ice_gathering_state.unwrap();
-                            if connection_state.ice_gathering_state.is_some() && state == web_sys::RtcIceGatheringState::Complete {
-                                console::log_1(&format!("Server: {:?}", connection_state).into());
-                                let answer = self.web_rtc_manager.deref().borrow_mut().create_encoded_offer();
-                                let data = SessionDetails::SessionClient(SessionClient::SessionAnswer(SessionAnswer{
-                                    code: self.code.clone(),
-                                    password: self.password.clone(),
-                                    answer,
-                                }));
-                                
-                                console::log_1(&format!("answer: {}", "answer").into());
-                                self.ws_send(data);
-                                self.web_rtc_ready = true;
+                        if let State::Client(connection_state) = state.clone() {
+                            if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
+                                console::log_1(&format!("Server ICE Gathering State: {:?}", state).into());
+                                if let Some(state) = connection_state.ice_gathering_state {
+                                    if state == web_sys::RtcIceGatheringState::Complete {
+                                        let answer = self.web_rtc_manager.deref().borrow_mut().create_encoded_offer();
+                                        let data = SessionDetails::SessionClient(SessionClient::SessionAnswer(SessionAnswer{
+                                            code: self.code.clone(),
+                                            password: self.password.clone(),
+                                            answer,
+                                        }));
+                                        
+                                        console::log_1(&format!("answer: {}", "answer").into());
+                                        self.ws_send(data);
+                                    }
+                                }
                             }
+
+                            self.web_rtc_state = connection_state;
                         };
                     }
                     WebRtcMessage::Reset => {
@@ -104,7 +103,8 @@ impl Component for Receive {
             Msg::CallbackWebsocket(msg) => {
                 match msg {
                     WebSocketMessage::Text(data) => {
-                        if self.web_rtc_ready == true {
+                        if self.web_rtc_state.data_channel_state.is_some() &&
+                            self.web_rtc_state.data_channel_state.unwrap() == web_sys::RtcDataChannelState::Open {
                             return false;
                         }
 
@@ -171,7 +171,7 @@ impl Component for Receive {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if self.web_socket.is_none() {
+        let section_websocket = if self.web_socket.is_none() {
             self.view_input_code(ctx)
         }
         else {
@@ -180,6 +180,33 @@ impl Component for Receive {
                     <p>{ctx.props().code.clone()}</p>
                 </div>
             }
+        };
+
+        let section_webrtc = if self.web_rtc_state.data_channel_state.is_some() &&
+            self.web_rtc_state.data_channel_state.unwrap() == web_sys::RtcDataChannelState::Open {
+            html! {
+                <>
+                    <div class="col-md-12">
+                        <p>{ "Connected" }</p>
+                    </div>
+                </>
+            }
+        }
+        else {
+            html! {
+                <>
+                    <div class="col-md-12">
+                        <p>{ "Not Connected" }</p>
+                    </div>
+                </>
+            }
+        };
+
+        html! {
+            <div>
+                {section_websocket}
+                {section_webrtc}
+            </div>
         }
     }
 }
