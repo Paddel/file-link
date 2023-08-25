@@ -135,7 +135,6 @@ impl WebRTCManager {
         }
 
         let connection_string = connection_string.ok().unwrap();
-        console::log_1(&format!("connection_string: {:?}", connection_string).into());
 
         let remote_description_js_value: JsValue =
             JSON::parse(&connection_string.offer).expect("Expected valid json");
@@ -183,8 +182,6 @@ impl WebRTCManager {
                     "set_local_description closure has encountered an exception".into(),
                 );
 
-                console::log_1(&"setting local description".into());
-
                 let _promise = web_rtc_manager_rc_clone_clone
                     .borrow()
                     .rtc_peer_connection
@@ -192,8 +189,6 @@ impl WebRTCManager {
                     .unwrap()
                     .set_local_description(&answer)
                     .catch(&set_local_description_exception_handler);
-
-                console::log_1(&answer.clone().into());
 
                 web_rtc_manager_rc_clone_clone.borrow_mut().offer =
                     Some(String::from(JSON::stringify(&answer).unwrap()));
@@ -342,8 +337,6 @@ impl WebRTCManager {
                     let rtc_session_description: RtcSessionDescriptionInit =
                         offer.unchecked_into::<RtcSessionDescriptionInit>();
 
-                    console::log_1(&rtc_session_description.clone().into());
-
                     web_rtc_manager_rc_clone.borrow_mut().offer = Some(String::from(
                         JSON::stringify(&rtc_session_description).unwrap(),
                     ));
@@ -398,8 +391,6 @@ impl WebRTCManager {
         let web_rtc_manager_argument = web_rtc_manager.clone();
         let on_ice_candidate_closure =
             Closure::wrap(Box::new(move |ice_connection_event: JsValue| {
-                console::log_1(&ice_connection_event);
-
                 let ice_connection_event_obj: RtcPeerConnectionIceEvent =
                     ice_connection_event.unchecked_into::<RtcPeerConnectionIceEvent>();
 
@@ -407,7 +398,6 @@ impl WebRTCManager {
                     let candidate_str = candidate.candidate();
 
                     if !candidate_str.is_empty() {
-                        console::log_1(&candidate_str.clone().into());
 
                         let saved_candidate = IceCandidate {
                             candidate: candidate_str,

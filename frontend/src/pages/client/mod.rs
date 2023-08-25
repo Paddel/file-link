@@ -76,7 +76,6 @@ impl Component for Receive {
                     WebRtcMessage::UpdateState(state) => {
                         if let State::Client(connection_state) = state.clone() {
                             if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
-                                console::log_1(&format!("Server ICE Gathering State: {:?}", state).into());
                                 if let Some(state) = connection_state.ice_gathering_state {
                                     if state == web_sys::RtcIceGatheringState::Complete {
                                         let answer = self.web_rtc_manager.deref().borrow_mut().create_encoded_offer();
@@ -86,7 +85,6 @@ impl Component for Receive {
                                             answer,
                                         }));
                                         
-                                        console::log_1(&format!("answer: {}", "answer").into());
                                         self.ws_send(data);
                                     }
                                 }
@@ -129,7 +127,6 @@ impl Component for Receive {
                                             .expect("alert should work");
                                         }
                                     }
-                                    console::log_1(&format!("result: {:?}", result).into());
                                 }
                                 SessionCheckResult::WrongPassword => {
                                     self.password_needed = true;
@@ -144,17 +141,10 @@ impl Component for Receive {
                         }
                     }
                     WebSocketMessage::Open => {
-                        // let offer = self.web_rtc_manager.deref().borrow_mut().create_offer();
-                        // let data = SessionDetails::SessionClient(SessionClient{
-                        //     code: self.code.clone(),
-                        //     password: self.password.clone(),
-                        // });
-
                         let data = SessionDetails::SessionClient(SessionClient::SessionFetchOffer(SessionFetchOffer{
                             code: self.code.clone(),
                             password: self.password.clone(),
                         }));
-
                         
                         self.ws_send(data);
                     }
@@ -220,7 +210,6 @@ impl Receive {
                 let input: HtmlInputElement = target.dyn_into().unwrap_throw();
                 let value = input.value();
                 callback.emit(value);
-                // ctx_clone.send_message(Msg::SessionConnect(value, "".to_string()));
             }
         });
 
@@ -235,7 +224,6 @@ impl Receive {
     fn ws_connect(&mut self, ctx: &Context<Self>) {
         let callback = ctx.link().callback(Msg::CallbackWebsocket);
         self.web_socket = WsConnection::new(WEBSOCKET_ADDRESS, callback).ok();
-        console::log_1(&format!("ws: ").into());
     }
 
     fn ws_disconnect(&mut self) {
@@ -248,6 +236,5 @@ impl Receive {
             .as_mut()
             .unwrap()
             .send_text(serde_json::to_string(&data).unwrap());
-        console::log_1(&format!("sent: {}", serde_json::to_string(&data).unwrap()).into());
     }
 }
