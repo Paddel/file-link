@@ -4,10 +4,10 @@ use yew_router::prelude::{BrowserRouter, Switch, use_navigator};
 
 use pages::Route;
 
-mod components;
 mod file_tag;
 mod pages;
 mod services;
+mod wrtc_protocol;
 
 #[function_component(Header)]
 pub fn header() -> Html {

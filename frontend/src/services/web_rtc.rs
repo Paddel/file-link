@@ -5,14 +5,14 @@ use std::rc::Rc;
 use std::str;
 
 use base64::{self, engine::general_purpose, Engine};
-use js_sys::{Array, Object, Reflect, JSON};
+use js_sys::{Array, Object, Reflect, JSON, ArrayBuffer};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     console, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit,
     RtcDataChannelState, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
-    RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSessionDescriptionInit,
+    RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSessionDescriptionInit, Blob,
 };
 
 use yew::callback::Callback;
@@ -25,6 +25,7 @@ const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
 #[derive(Clone, Debug, PartialEq)]
 pub enum WebRtcMessage {
     Message(String),
+    Data(JsValue, u32),
     UpdateState(State),
     Reset,
 }
@@ -60,7 +61,6 @@ pub enum OfferError {
     InvalidString,
     SerializationError,
     InvalidOffer,
-    //InvalidCandidate,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -82,6 +82,7 @@ pub struct WebRTCManager {
     state: State,
     rtc_peer_connection: Option<RtcPeerConnection>,
     data_channel: Option<RtcDataChannel>,
+    message_channel: Option<RtcDataChannel>,
     exit_offer_or_answer_early: bool,
     ice_candidates: Vec<IceCandidate>,
     offer: Option<String>,
@@ -94,6 +95,7 @@ impl WebRTCManager {
             state: State::Default,
             rtc_peer_connection: None,
             data_channel: None,
+            message_channel: None,
             ice_candidates: Vec::new(),
             offer: None,
             exit_offer_or_answer_early: false,
@@ -101,11 +103,40 @@ impl WebRTCManager {
     }
 
     pub fn send_message(&self, message_content: &str) {
-        self.data_channel
+        let connection_state: ConnectionState = match self.state {
+            State::Server(ref connection_state) | State::Client(ref connection_state) => connection_state.clone(),
+            _ => panic!("Not implemented"),
+        };
+        
+        if connection_state.message_channel_state != Some(RtcDataChannelState::Open) {
+            return;
+        }
+
+        self.message_channel
             .as_ref()
             .expect("must have a data channel")
             .send_with_str(message_content)
             .expect("channel is open");
+    }
+
+    pub async fn send_data(&self, data_content: &Blob) -> bool {
+        let connection_state: ConnectionState = match self.state {
+            State::Server(ref connection_state) | State::Client(ref connection_state) => connection_state.clone(),
+            _ => panic!("Not implemented"),
+        };
+        
+        if connection_state.data_channel_state != Some(RtcDataChannelState::Open) {
+            return false;
+        }
+
+        let data_array = JsFuture::from(data_content.array_buffer());
+        let data_array = data_array.await.unwrap().dyn_into::<js_sys::ArrayBuffer>().unwrap();
+        self.data_channel
+            .as_ref()
+            .expect("must have a data channel")
+            .send_with_array_buffer(&data_array)
+            .expect("channel is open");
+        true
     }
 
     fn get_state(&self) -> State {
@@ -125,7 +156,7 @@ impl WebRTCManager {
     }
 
     pub fn validate_offer(
-        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
+        web_rtc_manager: &Rc<RefCell<WebRTCManager>>,
         str: &str,
     ) -> Result<(), OfferError> {
         let ice_offer_bundle = Self::parse_base64_str_to_connection(str).map_err(|e| e)?;
@@ -167,7 +198,6 @@ impl WebRTCManager {
                 .unwrap()
                 .create_answer();
     
-            // Chain the asynchronous operations
             _ = JsFuture::from(
                 future
                     .then(&set_local_description_closure)
@@ -220,7 +250,7 @@ impl WebRTCManager {
 
 
     pub fn validate_answer(
-        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
+        web_rtc_manager: &Rc<RefCell<WebRTCManager>>,
         str: &str,
     ) -> Result<(), OfferError> {
         let ice_offer_bundle = Self::parse_base64_str_to_connection(str)?;
@@ -250,14 +280,12 @@ impl WebRTCManager {
         ice_offer_bundle: IceOfferBundle,
     ) -> SingleArgClosure {
         let ice_offer_bundle = Rc::new(ice_offer_bundle);
-        let web_rtc_manager_rc_clone = web_rtc_manager.clone();
-    
         Closure::wrap(Box::new(move |_: JsValue| {
-            Self::set_candidates(web_rtc_manager_rc_clone.clone(), &*ice_offer_bundle);
+            Self::set_candidates(web_rtc_manager.clone(), &*ice_offer_bundle);
         }) as SingleArgJsFn)
     }
 
-    pub fn start_web_rtc(web_rtc_manager: Rc<RefCell<Self>>) -> Result<(), JsValue> {
+    pub fn start_web_rtc(web_rtc_manager: &Rc<RefCell<Self>>) -> Result<(), JsValue> {
         let rtc_peer_connection = Self::initialize_rtc_peer_connection()?;
         let state = web_rtc_manager.borrow().state.clone();
         match state {
@@ -265,7 +293,7 @@ impl WebRTCManager {
             State::Client(_) => Self::setup_as_client(web_rtc_manager.clone(), rtc_peer_connection.clone()),
             _ => panic!("Not implemented"),
         }
-        Self::setup_rtc_event_listeners(web_rtc_manager, rtc_peer_connection)
+        Self::setup_rtc_event_listeners(&web_rtc_manager, rtc_peer_connection)
     }
     
     fn initialize_rtc_peer_connection() -> Result<RtcPeerConnection, JsValue> {
@@ -279,14 +307,43 @@ impl WebRTCManager {
     }
     
     fn setup_as_server(web_rtc_manager: Rc<RefCell<Self>>, rtc_peer_connection: RtcPeerConnection) {
-        let mut data_channel_init = RtcDataChannelInit::new();
-        data_channel_init.ordered(true);
-        let data_channel = rtc_peer_connection.create_data_channel_with_data_channel_dict("sendChannel", &data_channel_init);
-        web_rtc_manager.borrow_mut().data_channel = Self::set_data_channel(web_rtc_manager.clone(), data_channel);
+        let manager = web_rtc_manager.clone();
+        let on_message = {
+            Closure::wrap(Box::new(move |arg: JsValue| {
+            let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
+            let msg_content = message_event.data().as_string().unwrap();
+            manager
+                .borrow()
+                .callback
+                .emit(WebRtcMessage::Message(msg_content));
+        }) as SingleArgJsFn)};
+
+        let on_data = {
+            let manager = web_rtc_manager.clone();
+            Closure::wrap(Box::new(move |arg: JsValue| {
+            let data_event = arg.unchecked_into::<web_sys::MessageEvent>();
+            let data = data_event.data();
+            let size = data_event.data().dyn_into::<ArrayBuffer>().unwrap().byte_length();
+            // let data_content: Vec<u8> = js_sys::Uint8Array::new(&data_event.data().dyn_into::<js_sys::ArrayBuffer>().unwrap()).to_vec();
+            manager
+                .borrow()
+                .callback
+                .emit(WebRtcMessage::Data(data, size));
+        }) as SingleArgJsFn)};
+
+        web_rtc_manager.borrow_mut().data_channel = Self::create_channel(&web_rtc_manager, rtc_peer_connection.clone(), "data", on_data);
+        web_rtc_manager.borrow_mut().message_channel = Self::create_channel(&web_rtc_manager, rtc_peer_connection.clone(), "message", on_message);
     
-        let create_offer_closure = Self::create_offer_closure(web_rtc_manager.clone());
+        let create_offer_closure = Self::create_offer_closure(web_rtc_manager);
         let _create_offer_promise = rtc_peer_connection.create_offer().then(&create_offer_closure);
         create_offer_closure.forget();
+    }
+
+    fn create_channel(web_rtc_manager: &Rc<RefCell<Self>>, rtc_peer_connection: RtcPeerConnection, label: &str, output_closure: Closure<dyn FnMut(JsValue)>) -> Option<RtcDataChannel> {
+        let mut data_channel_init = RtcDataChannelInit::new();
+        data_channel_init.ordered(true);
+        let data_channel = rtc_peer_connection.create_data_channel_with_data_channel_dict(label, &data_channel_init);
+        Self::set_data_channel(web_rtc_manager, data_channel, output_closure)
     }
     
     fn setup_as_client(web_rtc_manager: Rc<RefCell<Self>>, rtc_peer_connection: RtcPeerConnection) {
@@ -295,7 +352,7 @@ impl WebRTCManager {
         on_data_channel_closure.forget();
     }
     
-    fn setup_rtc_event_listeners(web_rtc_manager: Rc<RefCell<Self>>, rtc_peer_connection: RtcPeerConnection) -> Result<(), JsValue> {
+    fn setup_rtc_event_listeners(web_rtc_manager: &Rc<RefCell<Self>>, rtc_peer_connection: RtcPeerConnection) -> Result<(), JsValue> {
         let on_ice_candidate_closure = Self::on_ice_candidate_closure(web_rtc_manager.clone());
         let on_ice_connection_state_change_closure = Self::get_on_ice_connection_state_change_closure(web_rtc_manager.clone());
         let on_ice_gathering_state_change_closure = Self::get_on_ice_gathering_state_change_closure(web_rtc_manager.clone());
@@ -327,7 +384,36 @@ impl WebRTCManager {
         let function: SingleArgJsFn = Box::new(move |data_channel_event: JsValue| {
             let event = data_channel_event.unchecked_into::<RtcDataChannelEvent>();
             let data_channel = event.channel();
-            web_rtc_manager.borrow_mut().data_channel = Self::set_data_channel(web_rtc_manager.clone(), data_channel);
+            
+            if data_channel.label() == "data" {
+                let on_data = {
+                    let manager = web_rtc_manager.clone();
+                    Closure::wrap(Box::new(move |arg: JsValue| {
+                        let data_event = arg.unchecked_into::<web_sys::MessageEvent>();
+                        let data = data_event.data();
+                        let size = data_event.data().dyn_into::<ArrayBuffer>().unwrap().byte_length();
+                        // let data_content: Vec<u8> = js_sys::Uint8Array::new(&data_event.data().dyn_into::<js_sys::ArrayBuffer>().unwrap()).to_vec();
+                        manager
+                            .borrow()
+                            .callback
+                            .emit(WebRtcMessage::Data(data, size));
+            }) as SingleArgJsFn)};
+                
+            web_rtc_manager.borrow_mut().data_channel = Self::set_data_channel(&web_rtc_manager, data_channel, on_data);
+            } else if data_channel.label() == "message" {
+                let on_message = {
+                    let manager = web_rtc_manager.clone();
+                    Closure::wrap(Box::new(move |arg: JsValue| {
+                    let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
+                    let msg_content = message_event.data().as_string().unwrap();
+                    manager
+                        .borrow()
+                        .callback
+                        .emit(WebRtcMessage::Message(msg_content));
+                }) as SingleArgJsFn)};
+
+                web_rtc_manager.borrow_mut().message_channel = Self::set_data_channel(&web_rtc_manager, data_channel, on_message);
+            }
         });
         Closure::wrap(function)
     }
@@ -373,7 +459,7 @@ impl WebRTCManager {
     
         let rtc_peer_connection = match manager.rtc_peer_connection.as_ref() {
             Some(connection) => connection,
-            None => return, // If the connection doesn't exist, exit early.
+            None => return,
         };
     
         let exception_handler = Self::get_exception_handler(
@@ -423,18 +509,8 @@ impl WebRTCManager {
     ) -> SingleArgClosure {
         Self::get_closure(web_rtc_manager, |connection_state, inner| {
             connection_state.data_channel_state = inner.data_channel.as_ref().map(|dc| dc.ready_state());
+            connection_state.message_channel_state = inner.message_channel.as_ref().map(|dc| dc.ready_state());
         })
-    }
-
-    fn get_on_data_closure(web_rtc_manager: Rc<RefCell<Self>>) -> SingleArgClosure {
-        Closure::wrap(Box::new(move |arg: JsValue| {
-            let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
-            let msg_content: String = message_event.data().as_string().unwrap();
-            web_rtc_manager
-                .borrow()
-                .callback
-                .emit(WebRtcMessage::Message(msg_content));
-        }) as SingleArgJsFn)
     }
 
     fn get_on_ice_connection_state_change_closure(
@@ -500,18 +576,17 @@ impl WebRTCManager {
         }) as SingleArgJsFn)
     }
 
-    fn set_data_channel(web_rtc_manager: Rc<RefCell<WebRTCManager>>, data_channel: RtcDataChannel) -> Option<RtcDataChannel> {
+    fn set_data_channel(web_rtc_manager: &Rc<RefCell<WebRTCManager>>, data_channel: RtcDataChannel, output_closure: Closure<dyn FnMut(JsValue)>) -> Option<RtcDataChannel> {
         let channel_status_change_closure = WebRTCManager::get_channel_status_change_closure(web_rtc_manager.clone());
         let channel_status_change_ref = channel_status_change_closure.as_ref().unchecked_ref();
         data_channel.set_onopen(Some(channel_status_change_ref));
         data_channel.set_onclose(Some(channel_status_change_ref));
     
-        let on_data_closure = WebRTCManager::get_on_data_closure(web_rtc_manager);
-        let on_data_ref = on_data_closure.as_ref().unchecked_ref();
+        let on_data_ref = output_closure.as_ref().unchecked_ref();
         data_channel.set_onmessage(Some(on_data_ref));
     
         channel_status_change_closure.forget();
-        on_data_closure.forget();
+        output_closure.forget();
         Some(data_channel)
     }
     

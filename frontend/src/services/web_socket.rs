@@ -3,7 +3,6 @@ use yew::Callback;
 use wasm_bindgen::JsCast;
 use web_sys::{BinaryType, Event, MessageEvent, WebSocket};
 
-/// Represents the different types of WebSocket messages.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WebSocketMessage {
     Text(String),
@@ -12,36 +11,18 @@ pub enum WebSocketMessage {
     Err,
 }
 
-/// Custom error types for `WsConnection`.
-#[derive(Clone, Debug, PartialEq, thiserror::Error)]
-pub enum WsError {
-    #[error("{0}")]
-    Creation(String),
-}
-
-/// A utility struct to manage WebSocket connections.
 pub struct WsConnection {
     ws: Option<WebSocket>,
     callback: Option<Callback<WebSocketMessage>>,
+    #[allow(dead_code)]
     event_listeners: Vec<EventListener>,
 }
 
 impl WsConnection {
-    /// Constructs a new `WsConnection`.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - The WebSocket URL.
-    /// * `callback` - A callback to handle WebSocket messages.
-    ///
-    /// # Returns
-    ///
-    /// * A Result containing the `WsConnection` instance or an error.
-    pub fn new(url: &str, callback: Callback<WebSocketMessage>) -> Result<Self, WsError> {
+    pub fn new(url: &str, callback: Callback<WebSocketMessage>) -> Result<Self, anyhow::Error> {
         let ws = WebSocket::new(url).map_err(|err| {
-            WsError::Creation(
-                err.unchecked_into::<js_sys::Error>().to_string().as_string().unwrap(),
-            )
+            let js_error = err.unchecked_into::<js_sys::Error>().to_string().as_string().unwrap();
+            anyhow::Error::msg(js_error)
         })?;
 
         ws.set_binary_type(BinaryType::Arraybuffer);
@@ -91,12 +72,7 @@ impl WsConnection {
         })
     }
 
-    /// Sends a text message over the WebSocket connection.
-    ///
-    /// # Arguments
-    ///
-    /// * `text` - The text message to send.
-    pub fn send_text(&mut self, text: String) {
+    pub fn send_text(&mut self, text: &str) {
         if let Some(ws) = &self.ws {
             if ws.send_with_str(&text).is_err() {
                 if let Some(cb) = &self.callback {

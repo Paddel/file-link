@@ -1,2 +1,4 @@
 target/
 certs/
+public/*
+!public/static/

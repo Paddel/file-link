@@ -23,9 +23,9 @@ pub enum Route {
 pub fn switch(route: Route) -> Html {
     match route {
         Route::Home => html! { <home::Home /> },
-        Route::Receive => html! { <client::Receive /> },
-        Route::ReceiveCode { code } => html! { <client::Receive {code} /> },
-        Route::Send => html! { <host::Send /> },
+        Route::Receive => html! { <client::Client /> },
+        Route::ReceiveCode { code } => html! { <client::Client {code} /> },
+        Route::Send => html! { <host::Host /> },
         Route::NotFound => html! { <home::Home /> },
     }
 }

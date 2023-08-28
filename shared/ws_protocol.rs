@@ -1,5 +1,5 @@
 /*
-    shared/ws_protocol.rs
+    ws_protocol.rs
 
     This module defines the WebSocket protocol data structures used for communication between the frontend and backend.
 */
@@ -14,7 +14,6 @@ pub enum SessionDetails {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SessionHost {
-    mode: String,
     offer: String,
     compression: u8,
     pub password: String,

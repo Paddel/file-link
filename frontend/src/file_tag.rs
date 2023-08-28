@@ -1,30 +1,49 @@
 use uuid::Uuid;
 use web_sys::{File, Blob};
 
+#[derive(Clone, Debug)]
+pub enum FileState {
+    Pending,
+    Transferring,
+    Done,
+    Failed,
+}
+
 #[derive(Clone)]
 pub struct FileTag {
-    file: File,
+    name: String,
+    pub size: f64,
     uuid: Uuid,
 }
 
 impl FileTag {
-    pub fn new(file: File) -> Self {
+    pub fn new(name: String, size: f64, uuid: Uuid) -> Self {
         Self {
-            file,
-            uuid: Uuid::new_v4(),
+            name,
+            size,
+            uuid,
         }
     }
 
-    pub fn blob(self) -> Blob {
-        self.file.into()
+    pub fn from(file: File) -> Self {
+        Self {
+            name: file.name(),
+            size: Into::<Blob>::into(file).size(),
+            uuid: Uuid::new_v4(),
+        }
     }
+    
 
-    pub fn name(&self) -> String {
-        self.file.name()
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn uuid(&self) -> Uuid {
         self.uuid
+    }
+
+    pub fn size(&self) -> f64 {
+        self.size
     }
 }
 

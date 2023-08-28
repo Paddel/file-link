@@ -34,10 +34,23 @@ features = ["js"]
 [dependencies.web-sys]
 version = "0.3.64"
 features = [
+  'Blob',
   'DataTransfer',
+  'DomStringList',
   'Document',
   'Element',
+  'HtmlAnchorElement',
   'HtmlElement',
+  'HtmlDocument',
+  'IdbCursorWithValue',
+  'IdbDatabase',
+  'IdbFactory',
+  'IdbKeyRange',
+  'IdbObjectStore',
+  'IdbObjectStoreParameters',
+  'IdbOpenDbRequest',
+  'IdbTransaction',
+  'IdbTransactionMode',
   'Node',
   'Window',
   'RtcAnswerOptions',
@@ -101,5 +114,4 @@ features = [
   'RtcdtmfToneChangeEvent',
   'RtcdtmfToneChangeEventInit',
   'RtcrtpContributingSourceStats',
-  'HtmlDocument',
 ]
