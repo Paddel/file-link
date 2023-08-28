@@ -17,6 +17,8 @@ use web_sys::{
 
 use yew::callback::Callback;
 
+use super::compression::compression;
+
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
 type SingleArgJsFn = Box<dyn FnMut(JsValue)>;
 
@@ -119,7 +121,7 @@ impl WebRTCManager {
             .expect("channel is open");
     }
 
-    pub async fn send_data(&self, data_content: &Blob) -> bool {
+    pub async fn send_data(&self, data_content: &Blob, compression_level: i32) -> bool {
         let connection_state: ConnectionState = match self.state {
             State::Server(ref connection_state) | State::Client(ref connection_state) => connection_state.clone(),
             _ => panic!("Not implemented"),
@@ -129,12 +131,19 @@ impl WebRTCManager {
             return false;
         }
 
-        let data_array = JsFuture::from(data_content.array_buffer());
-        let data_array = data_array.await.unwrap().dyn_into::<js_sys::ArrayBuffer>().unwrap();
+        let compression_level = compression_level.clamp(0, 10);
+
+        let data_array: JsFuture = JsFuture::from(data_content.array_buffer());
+        let data_array: ArrayBuffer = data_array.await.unwrap().dyn_into::<js_sys::ArrayBuffer>().unwrap();
+        let mut data_content: Vec<u8> = js_sys::Uint8Array::new(&data_array).to_vec();
+        if compression_level > 0 {
+            data_content = compression::compress(data_content.clone(), compression_level).unwrap();
+        }
+        let compressed_js_array = js_sys::Uint8Array::from(&data_content[..]);
         self.data_channel
             .as_ref()
             .expect("must have a data channel")
-            .send_with_array_buffer(&data_array)
+            .send_with_array_buffer(&compressed_js_array.buffer())
             .expect("channel is open");
         true
     }
@@ -390,30 +399,32 @@ impl WebRTCManager {
                     let manager = web_rtc_manager.clone();
                     Closure::wrap(Box::new(move |arg: JsValue| {
                         let data_event = arg.unchecked_into::<web_sys::MessageEvent>();
-                        let data = data_event.data();
-                        let size = data_event.data().dyn_into::<ArrayBuffer>().unwrap().byte_length();
-                        // let data_content: Vec<u8> = js_sys::Uint8Array::new(&data_event.data().dyn_into::<js_sys::ArrayBuffer>().unwrap()).to_vec();
+                        let data_content = js_sys::Uint8Array::new(&data_event.data().dyn_into::<js_sys::ArrayBuffer>().unwrap());
+                        let data_decompressed = compression::decompress(data_content.to_vec()).unwrap();
+                        let decompressed_js_array = js_sys::Uint8Array::from(data_decompressed.as_slice());
+                        
+                        manager.borrow().callback.emit(WebRtcMessage::Data(
+                            JsValue::from(decompressed_js_array.buffer()), 
+                            decompressed_js_array.byte_length()
+                        ));
+                    }) as SingleArgJsFn)
+                };
+                    
+                web_rtc_manager.borrow_mut().data_channel = Self::set_data_channel(&web_rtc_manager, data_channel, on_data);
+            } else if data_channel.label() == "message" {
+                    let on_message = {
+                        let manager = web_rtc_manager.clone();
+                        Closure::wrap(Box::new(move |arg: JsValue| {
+                        let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
+                        let msg_content = message_event.data().as_string().unwrap();
                         manager
                             .borrow()
                             .callback
-                            .emit(WebRtcMessage::Data(data, size));
-            }) as SingleArgJsFn)};
-                
-            web_rtc_manager.borrow_mut().data_channel = Self::set_data_channel(&web_rtc_manager, data_channel, on_data);
-            } else if data_channel.label() == "message" {
-                let on_message = {
-                    let manager = web_rtc_manager.clone();
-                    Closure::wrap(Box::new(move |arg: JsValue| {
-                    let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
-                    let msg_content = message_event.data().as_string().unwrap();
-                    manager
-                        .borrow()
-                        .callback
-                        .emit(WebRtcMessage::Message(msg_content));
-                }) as SingleArgJsFn)};
+                            .emit(WebRtcMessage::Message(msg_content));
+                    }) as SingleArgJsFn)};
 
-                web_rtc_manager.borrow_mut().message_channel = Self::set_data_channel(&web_rtc_manager, data_channel, on_message);
-            }
+                    web_rtc_manager.borrow_mut().message_channel = Self::set_data_channel(&web_rtc_manager, data_channel, on_message);
+                }
         });
         Closure::wrap(function)
     }

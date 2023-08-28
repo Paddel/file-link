@@ -157,7 +157,7 @@ impl Host {
                 let sent_success = web_rtc_manager
                     .deref()
                     .borrow()
-                    .send_data(&chunk)
+                    .send_data(&chunk, 10)
                     .await;
 
                 if !sent_success {

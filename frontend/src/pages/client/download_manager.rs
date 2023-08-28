@@ -180,18 +180,18 @@ impl DownloadManager {
     fn transfer_to_download(js_blob_parts: &Array, event: web_sys::Event, file_tag: &FileTag) -> Result<(), JsValue> {
         let cursor: Result<web_sys::IdbCursorWithValue, JsValue> = event.target().unwrap().dyn_into::<web_sys::IdbRequest>()?.result()?.dyn_into::<web_sys::IdbCursorWithValue>();
         
-        if cursor.is_ok() {
-            let cursor = cursor.unwrap();
-            let value = cursor.value()?;
-            let u8_array = js_sys::Uint8Array::new(&value.dyn_into::<js_sys::ArrayBuffer>().unwrap()).to_vec();
-            let bytes = Array::new();
-            bytes.push(&js_sys::Uint8Array::from(&u8_array[..]));
-            let blob = web_sys::Blob::new_with_u8_array_sequence(&bytes)?;
-            js_blob_parts.push(&blob);
-            cursor.continue_()?;
-        } else {
-            
+        if cursor.is_err() {
+            return Ok(());
         }
+
+        let cursor = cursor.unwrap();
+        let value = cursor.value()?;
+        let u8_array = js_sys::Uint8Array::new(&value.dyn_into::<js_sys::ArrayBuffer>().unwrap()).to_vec();
+        let bytes = Array::new();
+        bytes.push(&js_sys::Uint8Array::from(&u8_array[..]));
+        let blob = web_sys::Blob::new_with_u8_array_sequence(&bytes)?;
+        js_blob_parts.push(&blob);
+        cursor.continue_()?;
 
         Ok(())
     }
