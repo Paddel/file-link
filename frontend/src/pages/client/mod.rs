@@ -5,7 +5,6 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{HtmlInputElement, console};
 use yew::prelude::*;
 
@@ -14,7 +13,7 @@ use download_manager::DownloadManager;
 use crate::file_tag::{FileTag, FileState};
 use crate::services::web_rtc::{WebRTCManager, WebRtcMessage, State, ConnectionState};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
-use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
+use crate::wrtc_protocol::{FilesUpdate, FileRequest};
 
 mod download_manager;
 
@@ -24,13 +23,13 @@ include!("../../../../shared/ws_protocol.rs");
 pub struct FileItem {
     state: FileState,
     tag: FileTag,
-    queued: bool,
     progress: f64,
 }
 
 pub enum Msg {
     SessionConnect(String),
     FileAccept(FileTag),
+    FileDownload(FileTag),
 
     CallbackWebRtc(WebRtcMessage),
     CallbackWebsocket(WebSocketMessage),
@@ -82,7 +81,10 @@ impl Component for Client {
                 self.ws_connect(ctx);
             }
             Msg::FileAccept(tag) => {
-                return self.web_rtc_request_file(tag);
+                return self.handle_file_accept(tag);
+            }
+            Msg::FileDownload(tag) => {
+                self.download_manager.download(tag);
             }
             Msg::CallbackWebRtc(msg) => {
                 self.update_web_rtc(ctx, msg);
@@ -141,18 +143,24 @@ impl Component for Client {
 }
 
 impl Client {
-    fn web_rtc_request_file(&mut self, tag: FileTag) -> bool {
-        let file_item = self.files.get_mut(&tag.uuid());
-        if file_item.is_none() {
-            return false;
+    fn handle_file_accept(&mut self, file_tag: FileTag) -> bool {
+        let file_item: Option<&mut FileItem> = self.files.get_mut(&file_tag.uuid());
+        let file_item = match file_item {
+            Some(item) => item,
+            None => return false,
+        };                
+
+        if self.download_manager.active() {
+            file_item.state = FileState::Queued;
+            return true;
         }
-        self.download_manager.new_file(tag.clone());
 
-        let file_item = file_item.unwrap();
+        self.download_manager.new_file(file_tag.clone());
+
         file_item.state = FileState::Transferring;
-        self.fetchin_file = Some(tag.clone());
+        self.fetchin_file = Some(file_tag.clone());
 
-        let file_request = FileRequest {uuid: file_item.tag.uuid()};
+        let file_request = FileRequest {uuid: file_tag.uuid()};
         self.web_rtc_manager
             .deref()
             .borrow()
@@ -176,7 +184,7 @@ impl Client {
             .send_text(&serde_json::to_string(&data).unwrap());
     }
 
-    fn update_web_rtc(&mut self, _: &Context<Self>, msg: WebRtcMessage) -> bool {
+    fn update_web_rtc(&mut self, ctx: &Context<Self>, msg: WebRtcMessage) -> bool {
         match msg {
             WebRtcMessage::Message(data) => {
                 let update: Result<FilesUpdate, serde_json::Error> = serde_json::from_str(&data);
@@ -187,8 +195,35 @@ impl Client {
             }
             WebRtcMessage::Data(data, size) => {
                 let result = self.download_manager.save_chunk(&data, size);
+                
                 if result.is_err() {
-                    console::log_1(&format!("Error saving chunk: {:?}", result.err().unwrap()).into());
+                    console::log_1(&format!("Error saving chunk: {:?}", result.clone().err().unwrap()).into());
+                    return false;
+                }
+
+                let file_tag = self.download_manager.get_file_tag();
+                let file = self.files.get_mut(&file_tag.unwrap().uuid());
+                let file = match file {
+                    Some(file) => file,
+                    None => return false,
+                };
+                
+
+                if result.unwrap() {
+                    
+                    file.state = FileState::Done;
+                    file.progress = 100.0;
+                    for (_, file) in self.files.iter() {
+                        if file.state == FileState::Queued {
+                            self.handle_file_accept(file.tag.clone());
+                            break;
+                        }
+                    }
+                }
+                else {
+                    file.state = FileState::Transferring;
+                    file.progress = self.download_manager.get_progress();
+                    return true
                 }
                 return true;
             }
@@ -199,7 +234,7 @@ impl Client {
                 };
             }
             WebRtcMessage::Reset => {
-                console::log_1(&format!("WebRtcMessage::Reset").into());
+                self.web_rtc_manager = WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc));
             }
         }
         true
@@ -237,12 +272,10 @@ impl Client {
                         }
                         SessionCheckResult::WrongPassword => {
                             self.password_needed = true;
-                            console::log_1(&format!("WrongPassword").into());
                         }
                         SessionCheckResult::NotFound => {
                             self.password_needed = false;
                             self.ws_disconnect();
-                            console::log_1(&format!("NotFound").into());
                         }
                     }
                 }
@@ -271,6 +304,7 @@ impl Client {
     }
 
     fn view_file_row(&self, ctx: &Context<Self>, index: usize, file: &FileItem) -> Html {
+        let file_tag = file.tag.clone();
         let control_pannel = {
             match file.state {
                 FileState::Pending => {
@@ -281,17 +315,17 @@ impl Client {
                 }
                 FileState::Transferring => {
                     html! {
-                        <p>{format!("Progress: {}%", file.progress)}</p>
+                        <p>{format!("Progress: {}%", (file.progress*100.0) as u32)}</p>
                     }
                 }
                 FileState::Done => {
                     html! {
-                        <button onclick={ctx.link().callback(|_| Msg::SessionConnect("".to_string()))}>{ "connect" }</button>
+                        <button onclick={ctx.link().callback(move |_| Msg::FileDownload(file_tag.clone()))}>{ "download" }</button>
                     }
                 }
-                FileState::Failed => {
+                FileState::Queued => {
                     html! {
-                        <button onclick={ctx.link().callback(|_| Msg::SessionConnect("".to_string()))}>{ "connect" }</button>
+                        <p>{ "Queued" }</p>
                     }
                 }
             }
@@ -309,7 +343,7 @@ impl Client {
     }
 
     fn on_state_update(&mut self, connection_state: &ConnectionState) {
-        console::log_1(&format!("UpdateState {:?}", connection_state).into());
+        // console::log_1(&format!("UpdateState {:?}", connection_state).into());
         if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
             if let Some(state) = connection_state.ice_gathering_state {
                 if state == web_sys::RtcIceGatheringState::Complete {
@@ -333,7 +367,6 @@ impl Client {
             self.files.insert(file_tag.uuid(), FileItem {
                 state: FileState::Pending,
                 tag: file_tag,
-                queued: false,
                 progress: 0.0,
             });
         }

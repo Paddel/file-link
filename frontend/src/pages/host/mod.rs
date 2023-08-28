@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use web_sys::{console, File, Blob};
+use web_sys::{console, File};
 use yew::platform::spawn_local;
 use yew::{Html, html, Context, Component};
 
@@ -34,8 +34,10 @@ pub struct FileItem {
 pub enum Msg {
     Update(Vec<File>),
     SessionStart,
+    TransferUpdate((FileTag, f64)),
+    FileRemove(FileTag),
 
-    CallbackWebRTC(WebRtcMessage),
+    CallbackWebRtc(WebRtcMessage),
     CallbackWebsocket(WebSocketMessage),
 }
 
@@ -54,7 +56,7 @@ impl Component for Host {
     
     fn create(ctx: &Context<Self>) -> Self {
         Host {
-            web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRTC)),
+            web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
             web_rtc_state: ConnectionState::new(),
             web_socket: None,
             files: HashMap::new(),
@@ -73,7 +75,22 @@ impl Component for Host {
                 let _: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
                 true
             }
-            Msg::CallbackWebRTC(msg) => {
+            Msg::TransferUpdate((file_tag, progress)) => {
+                let file = self.files.get_mut(&file_tag.uuid);
+                if let Some(file) = file {
+                    file.progress = progress;
+                    if progress >= 1.0 {
+                        file.state = FileState::Done;
+                    }
+                }
+                true
+            }
+            Msg::FileRemove(tag) => {
+                self.files.remove(&tag.uuid);
+                self.web_rtc_send_update();
+                true
+            }
+            Msg::CallbackWebRtc(msg) => {
                 self.update_web_rtc(ctx, msg)
             }
             Msg::CallbackWebsocket(msg) => {
@@ -95,14 +112,13 @@ impl Component for Host {
 impl Host {
     fn handle_files(&mut self, files: Vec<File>) {
         files.into_iter().for_each(|file| {
-            let uuid = Uuid::new_v4();
             let item = FileItem {
                 state: FileState::Pending,
                 tag: FileTag::from(file.clone()),
                 js_file: file.clone(),
                 progress: 0.0,
             };
-            self.files.insert(uuid, item);
+            self.files.insert(item.tag.uuid, item);
         });
 
         self.web_rtc_send_update();
@@ -117,7 +133,7 @@ impl Host {
             }
         }).collect();
 
-        let update = FilesUpdate {files};
+        let update = FilesUpdate{files};
         let message = serde_json::to_string(&update).unwrap();
         self.web_rtc_manager
         .deref()
@@ -129,15 +145,19 @@ impl Host {
         !matches!(self.web_rtc_state.ice_connection_state, Some(web_sys::RtcIceConnectionState::Connected))
     }
     
-    fn web_rtc_send_file(&self, uuid: Uuid) {
-        let file = self.files.iter().find(|(_, file)| file.tag.uuid() == uuid);	
-        if file.is_none() {
-            return;
-        }
+    fn web_rtc_send_file(&mut self, ctx: &Context<Self>, uuid: Uuid) {
+        // let file = self.files.iter().find(|(_, file)| file.tag.uuid() == uuid);	
+        let file = self.files.get_mut(&uuid);
+        let file = match file {
+            Some(file) => file,
+            None => return,
+        };
+
+        file.state = FileState::Transferring;
         
-        let file = file.unwrap().1.clone();
+        let callback_update = ctx.link().callback(|(tag, progress)| Msg::TransferUpdate((tag, progress)));
+        let mut file = file.clone();
         let web_rtc_manager = self.web_rtc_manager.clone();
-        console::log_1(&format!("Sending file {}", file.tag.name()).into());
         spawn_local(async move {
             let blob = file.js_file.deref();
 
@@ -164,9 +184,9 @@ impl Host {
                     console::log_1(&format!("Failed to send chunk").into());
                     return;
                 }
-                console::log_1(&format!("Sent chunk x").into());
-
+                file.progress = end / blob.size();
                 offset += CHUNK_SIZE;
+                callback_update.emit((file.tag.clone(), file.progress));
             }
         });
     }
@@ -190,13 +210,12 @@ impl Host {
     fn update_web_rtc(&mut self, ctx: &Context<Self>, msg: WebRtcMessage) -> bool {
         match msg {
             WebRtcMessage::Message(data) => {
-                console::log_1(&format!("WebRtcMessage::Message {}", data).into());
                 let update: Result<FileRequest, serde_json::Error> = serde_json::from_str(&data);
                 if update.is_err() {
                     return false;
                 }
 
-                self.web_rtc_send_file(update.unwrap().uuid);
+                self.web_rtc_send_file(ctx, update.unwrap().uuid);
                 true
             }
             WebRtcMessage::Data(_, _) => {
@@ -206,7 +225,7 @@ impl Host {
             WebRtcMessage::UpdateState(state) => {
                 let mut update = false;
                 if let State::Server(connection_state) = state.clone() {
-                    console::log_1(&format!("UpdateState {:?}", connection_state).into());
+                    // console::log_1(&format!("UpdateState {:?}", connection_state).into());
                     if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
                         if let Some(state) = connection_state.ice_gathering_state {
                             if state == web_sys::RtcIceGatheringState::Complete {
@@ -229,8 +248,7 @@ impl Host {
                 update
             }
             WebRtcMessage::Reset => {
-                self.web_rtc_manager = WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRTC));
-                console::log_1(&format!("Client Reset").into());
+                self.web_rtc_manager = WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc));
                 false
             }
         }
@@ -305,19 +323,22 @@ impl Host {
         }
     }
 
-    fn view_session_handle (&self, ctx: &Context<Self>) -> Html {
+    fn view_session_handle(&self, ctx: &Context<Self>) -> Html {
         html! {
                 <table class="table">
                     <tbody>
                         <DropFiles onupdate={ctx.link().callback(Msg::Update)} />
                         {
                             for self.files.iter().enumerate().map(|(index, (_, file))| {
+                                let tag = file.tag.clone();
                                 html! {
                                     <tr>
                                         <td>{index}</td>
-                                        <td>{&file.tag.name()}</td>
-                                        <td>{file.tag.size()}</td>
+                                        <td>{&tag.name()}</td>
+                                        // <td>{tag.size()}</td>
+                                        <td>{tag.uuid().to_string()}</td>
                                         <td>{format!("{:?}", file.state)}</td>
+                                        <td>{Self::view_control_pannel(ctx, file)}</td>
                                         <td>{"Waiting for Receiver"}</td>
                                     </tr>
                                 }
@@ -325,6 +346,31 @@ impl Host {
                          }
                 </tbody>
             </table>
+        }
+    }
+
+    fn view_control_pannel(ctx: &Context<Self>, file: &FileItem) -> Html {
+        match file.state {
+            FileState::Pending => {
+                let tag = file.tag.clone();
+                html! {
+                    <button onclick={ctx.link().callback(move |_| Msg::FileRemove(tag.clone()))}>{ "Remove" }</button>
+                }
+            }
+            FileState::Transferring => {
+                html! {
+                    <p>{format!("Progress: {}%", (file.progress*100.0) as u32)}</p>
+                }
+            }
+            FileState::Done => {
+                html! {
+                    <p>{ "Done" }</p>
+                }
+            }
+            _ => {
+                html! {
+                }
+            }
         }
     }
 }

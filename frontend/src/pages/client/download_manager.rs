@@ -1,16 +1,23 @@
-use std::{cell::RefCell, rc::Rc, ops::Deref};
+use std::{cell::RefCell, rc::Rc};
 
 use js_sys::Array;
+use serde_derive::{Serialize, Deserialize};
 use wasm_bindgen::{JsValue, prelude::Closure, JsCast};
 use web_sys::{console, IdbDatabase, IdbKeyRange};
 
 use crate::file_tag::FileTag;
 
+const STORE_NAME: &str = "file.link.chunks";
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FileMeta {
+    name: String,
+    chunks: u32,
+}
 
 pub struct DownloadManager {
     idb: Rc<RefCell<Option<IdbDatabase>>>,
     downloaded_volume: u64,
-    aseembled_volume: u64,
     file_tag: Option<FileTag>,
     chunk_counter: u32,
 }
@@ -26,7 +33,6 @@ impl DownloadManager {
         Self {
             idb,
             downloaded_volume: 0,
-            aseembled_volume: 0,
             file_tag: None,
             chunk_counter: 0,
         }
@@ -63,9 +69,9 @@ impl DownloadManager {
         let on_upgrade_needed = Closure::wrap(Box::new(move |event: web_sys::Event| {
             console::log_1(&format!("Upgrading downloads database").into());
             let db: web_sys::IdbDatabase = event.target().unwrap().dyn_into::<web_sys::IdbRequest>().unwrap().result().unwrap().dyn_into::<web_sys::IdbDatabase>().unwrap();
-            if !db.object_store_names().contains(&"chunks".to_string()) {
+            if !db.object_store_names().contains(&STORE_NAME.to_string()) {
                 db.create_object_store_with_optional_parameters(
-                    "chunks", 
+                    STORE_NAME, 
                     &web_sys::IdbObjectStoreParameters::new().auto_increment(true)
                 ).unwrap();
 
@@ -97,70 +103,113 @@ impl DownloadManager {
         }
     }
 
+    pub fn get_file_tag(&self) -> Option<FileTag> {
+        self.file_tag.clone()
+    }
+
+    pub fn get_progress(&self) -> f64 {
+        if let Some(file_tag) = &self.file_tag {
+            self.downloaded_volume as f64 / file_tag.size as f64
+        } else {
+            0.0
+        }
+    }
+
     pub fn new_file(&mut self, file_tag: FileTag) {
         self.file_tag = Some(file_tag);
         self.downloaded_volume = 0;
         self.chunk_counter = 0;
     }
 
-    pub fn save_chunk(&mut self, chunk: &JsValue, size: u32) -> Result<(), JsValue> {
+    pub fn save_chunk(&mut self, chunk: &JsValue, size: u32) -> Result<bool, JsValue> {
+        if self.file_tag.is_none() {
+            return Err(JsValue::from_str("No file tag set"));
+        }
+
+        let file_tag = self.file_tag.clone().unwrap();
+        let transaction = self.idb
+            .borrow();
+
+        if transaction.is_none() {
+            return Err(JsValue::from_str("No IDB transaction"));
+        }
+
+
+        let transaction = transaction
+            .as_ref()
+            .unwrap()
+            .transaction_with_str_and_mode(STORE_NAME, web_sys::IdbTransactionMode::Readwrite)?;
+
+        let store: web_sys::IdbObjectStore = transaction.object_store(STORE_NAME)?;
+        let key = JsValue::from_str(&format!("${}-${}", self.file_tag.as_ref().unwrap().uuid(), self.chunk_counter));
+        _= store.put_with_key(chunk, &key)?;
+        self.downloaded_volume += size as u64;
+        self.chunk_counter += 1;
+        
+        if self.downloaded_volume == file_tag.size as u64 {
+            self.download(self.file_tag.clone().unwrap());
+            let key_meta = JsValue::from_str(&format!("${}", self.file_tag.as_ref().unwrap().uuid()));
+            let info_meta = serde_json::to_string(&FileMeta {
+                name: file_tag.name().to_string(),
+                chunks: self.chunk_counter,
+            }).unwrap();
+            let info_meta = JsValue::from_str(&info_meta);
+            _ = store.put_with_key(&info_meta, &key_meta);
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub fn download(&self, file_tag: FileTag) {
         let transaction = self.idb
             .borrow()
             .as_ref()
             .unwrap()
-            .transaction_with_str_and_mode("chunks", web_sys::IdbTransactionMode::Readwrite)?;
-        let store: web_sys::IdbObjectStore = transaction.object_store("chunks")?;
-        let key = JsValue::from_str(&format!("${}-${}", self.file_tag.as_ref().unwrap().uuid(), self.chunk_counter));
-        store.put_with_key(chunk, &key)?;
-        self.downloaded_volume += size as u64;
-        self.chunk_counter += 1;
-        
-        if self.downloaded_volume == self.file_tag.as_ref().unwrap().size as u64 {
-            self.assemble_and_download();
-        }
-        
-        Ok(())
+            .transaction_with_str_and_mode(STORE_NAME, web_sys::IdbTransactionMode::Readonly).unwrap();
+        let store: web_sys::IdbObjectStore = transaction.object_store(STORE_NAME).unwrap();
+
+        let key_meta = JsValue::from_str(&format!("${}", file_tag.uuid()));
+        let key_range = IdbKeyRange::only(&key_meta).unwrap();
+        let store_clone = store.clone();
+        let on_success: Closure<dyn FnMut(web_sys::Event)> = Closure::wrap(Box::new(move |event| {
+            let cursor: Result<web_sys::IdbCursorWithValue, JsValue> = event.target().unwrap().dyn_into::<web_sys::IdbRequest>().unwrap().result().unwrap().dyn_into::<web_sys::IdbCursorWithValue>();
+            if cursor.is_err() {
+                return;
+            }
+            let cursor = cursor.unwrap();
+            let value = cursor.value().unwrap();
+            let meta: FileMeta = serde_json::from_str(&value.as_string().unwrap()).unwrap();
+            Self::assemble_and_download(store_clone.clone(),file_tag.clone(), meta);
+        }));
+
+        store.open_cursor_with_range(&key_range).unwrap().set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
+        on_success.forget();
     }
 
-    pub fn assemble_and_download(&self) {
-        if self.file_tag.is_none() {
-            return;
-        }
-
-        let transaction = self.idb
-        .borrow()
-        .as_ref()
-        .unwrap()
-        .transaction_with_str_and_mode("chunks", web_sys::IdbTransactionMode::Readonly).unwrap();
-        let store: web_sys::IdbObjectStore = transaction.object_store("chunks").unwrap();
-
-
-        
-
+    pub fn assemble_and_download(store: web_sys::IdbObjectStore, file_tag: FileTag, info_meta: FileMeta) {
         let js_blob_parts = Rc::new(RefCell::new(js_sys::Array::new()));
-        for counter in 0..self.chunk_counter {
-            let file_tag = self.file_tag.clone().unwrap();
+        for counter in 0..info_meta.chunks {
             let js_blob_parts = js_blob_parts.clone();
-            let num_chunks = self.chunk_counter.clone();
-
+            let chunks = info_meta.chunks.clone();
+            let key = JsValue::from_str(&format!("${}-${}", file_tag.uuid(), counter));
+            let key_range = IdbKeyRange::only(&key).unwrap();
+            
+            let info_meta = info_meta.clone();
             let on_success: Closure<dyn FnMut(web_sys::Event)> = Closure::wrap(Box::new(move |event| {
-                let result = Self::transfer_to_download(&js_blob_parts.borrow_mut(), event, &file_tag);
+                let result = Self::transfer_to_download(&js_blob_parts.borrow_mut(), event);
                 if let Err(err) = result {
                     console::log_1(&format!("Error downloading file: {:?}", err).into());
                 }
-
-                if counter == num_chunks - 1 {
+                
+                if counter == chunks - 1 {
                     let anchor = Self::inject_download(&js_blob_parts.borrow());
                     if let Ok(anchor) = anchor {
-                        let _ = anchor.set_download(file_tag.name());
+                        let _ = anchor.set_download(&info_meta.clone().name);
                         anchor.click();
                     }
                 }
             }));
-
-
-            let key = JsValue::from_str(&format!("${}-${}", self.file_tag.as_ref().unwrap().uuid(), counter));
-            let key_range = IdbKeyRange::only(&key).unwrap();
+            
             store.open_cursor_with_range(&key_range).unwrap().set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
             on_success.forget();
         }
@@ -177,7 +226,7 @@ impl DownloadManager {
         Ok(anchor)
     }
 
-    fn transfer_to_download(js_blob_parts: &Array, event: web_sys::Event, file_tag: &FileTag) -> Result<(), JsValue> {
+    fn transfer_to_download(js_blob_parts: &Array, event: web_sys::Event) -> Result<(), JsValue> {
         let cursor: Result<web_sys::IdbCursorWithValue, JsValue> = event.target().unwrap().dyn_into::<web_sys::IdbRequest>()?.result()?.dyn_into::<web_sys::IdbCursorWithValue>();
         
         if cursor.is_err() {

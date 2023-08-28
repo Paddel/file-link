@@ -1,10 +1,7 @@
-use std::collections::HashMap;
 use std::convert::TryInto;
 
 use yew::prelude::*;
-use web_sys::{FileList, HtmlInputElement, File, Blob, console};
-
-use crate::{file_tag::{FileTag, FileState}, pages::client::FileItem};
+use web_sys::{FileList, HtmlInputElement, File};
 
 pub enum Msg {
     DragOver(DragEvent),

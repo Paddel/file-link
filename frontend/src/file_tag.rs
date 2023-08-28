@@ -1,19 +1,19 @@
 use uuid::Uuid;
 use web_sys::{File, Blob};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FileState {
     Pending,
     Transferring,
     Done,
-    Failed,
+    Queued,
 }
 
 #[derive(Clone)]
 pub struct FileTag {
     name: String,
     pub size: f64,
-    uuid: Uuid,
+    pub uuid: Uuid,
 }
 
 impl FileTag {
