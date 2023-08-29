@@ -5,23 +5,25 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use web_sys::{console, File};
+use web_sys::{console, File, HtmlInputElement};
 use yew::platform::spawn_local;
-use yew::{Html, html, Context, Component};
+use yew::{Html, html, Context, Component, NodeRef};
 
 use drop_files::DropFiles;
 
 use crate::file_tag::{FileState, FileTag};
+use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
 
 mod drop_files;
+mod slider;
 
 include!(concat!(env!("OUT_DIR"), "/config.rs"));
 include!("../../../../shared/ws_protocol.rs");
 
-const COMPRESSION_DEFAULT: u8 = 9;
+const COMPRESSION_DEFAULT: i32 = 9;
 
 #[derive(Clone)]
 pub struct FileItem {
@@ -33,6 +35,7 @@ pub struct FileItem {
 
 pub enum Msg {
     Update(Vec<File>),
+    CompressionUpdate(i32),
     SessionStart,
     TransferUpdate((FileTag, f64)),
     FileRemove(FileTag),
@@ -47,6 +50,9 @@ pub struct Host {
     web_socket: Option<WsConnection>,
     files: HashMap<Uuid, FileItem>,
     code: String,
+    compression_level: i32,
+    node_compression: NodeRef,
+    node_password: NodeRef,
 }
 
 impl Component for Host {
@@ -61,6 +67,9 @@ impl Component for Host {
             web_socket: None,
             files: HashMap::new(),
             code: String::new(),
+            compression_level: COMPRESSION_DEFAULT,
+            node_compression: NodeRef::default(),
+            node_password: NodeRef::default(),
         }
     }
 
@@ -68,6 +77,15 @@ impl Component for Host {
         match msg {
             Msg::Update(files) => {
                 self.handle_files(files);
+                true
+            }
+            Msg::CompressionUpdate(value) => {
+                // let event: Event = event.dyn_into().unwrap();
+                // let event_target = event.target().unwrap();
+                // let target: HtmlInputElement = event_target.dyn_into().unwrap();
+
+                // self.compression_level = target.value().parse::<i32>().unwrap();
+                self.compression_level = value;
                 true
             }
             Msg::SessionStart => {
@@ -278,11 +296,23 @@ impl Host {
                 update
             }
             WebSocketMessage::Open => {
+                let password = if let Some(input) = self.node_password.cast::<HtmlInputElement>() {
+                    input.value()
+                } else {
+                    "".to_string()
+                };
+
+                let compression = if let Some(input) = self.node_compression.cast::<HtmlInputElement>() {
+                    input.value().parse::<i32>().unwrap()
+                } else {
+                    COMPRESSION_DEFAULT
+                };
+
                 let offer = self.web_rtc_manager.deref().borrow_mut().create_encoded_offer();
                 let data = SessionDetails::SessionHost(SessionHost{
                     offer,
-                    password: "".to_string(),
-                    compression: COMPRESSION_DEFAULT,
+                    password,
+                    compression: compression as u8,
                 });
                 self.ws_send(data);
                 false
@@ -311,11 +341,16 @@ impl Host {
             html! {
                 <div class="col-md-12">
                     <label for="password">{"Enter Password (Optional):"}</label>
-                    <input type="password" id="password" placeholder="Enter Password" />
+                    <input type="password" ref={self.node_password.clone()} placeholder="Enter Password" />
 
-                    <label for="compression-slider">{"Choose Compression Level (0-10):"}</label>
-                    <input type="range" id="compression-slider" min="0" max="10" step="1" value="5"/>
-                    <span id="slider-value">{5}</span>
+                    <Slider label="Compression Level"
+                        min={0} max={10}
+                        onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value)})}
+                        value={self.compression_level}
+                    />
+                    // <label for="compression-slider">{"Choose Compression:"}</label>
+                    // <input type="range" oninput={ctx.link().callback(|event| Msg::CompressionUpdate(event))} min="0" max="10" step="1" value="{self.compression_level}"/>
+                    // <span id="slider-value">{self.compression_level}</span>
 
                     <button onclick={ctx.link().callback(|_| Msg::SessionStart)}>{"connect"}</button>
                 </div>
@@ -343,8 +378,7 @@ impl Host {
                                     <tr>
                                         <td>{index}</td>
                                         <td>{&tag.name()}</td>
-                                        // <td>{tag.size()}</td>
-                                        <td>{tag.uuid().to_string()}</td>
+                                        <td>{tag.size()}</td>
                                         <td>{format!("{:?}", file.state)}</td>
                                         <td>{Self::view_control_pannel(ctx, file)}</td>
                                         <td>{"Waiting for Receiver"}</td>

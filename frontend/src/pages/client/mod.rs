@@ -27,7 +27,7 @@ pub struct FileItem {
 }
 
 pub enum Msg {
-    SessionConnect(String),
+    SessionConnect(),
     FileAccept(FileTag),
     FileDownload(FileTag),
 
@@ -50,8 +50,9 @@ pub struct Client {
     password_needed: bool,
     session_host: Option<SessionHost>,
     files: HashMap<Uuid, FileItem>,
-    input_code: NodeRef,
     fetchin_file: Option<FileTag>,
+    input_code: NodeRef,
+    input_password: NodeRef,
 }
 
 impl Component for Client {
@@ -69,15 +70,25 @@ impl Component for Client {
             session_host: None,
             files: HashMap::new(),
             input_code: NodeRef::default(),
+            input_password: NodeRef::default(),
             fetchin_file: None,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::SessionConnect(password) => {
-                self.session_details.code = self.input_code.cast::<HtmlInputElement>().unwrap().value();
-                self.session_details.password = password;
+            Msg::SessionConnect() => {
+                if self.session_details.code.is_empty() && self.input_code.cast::<HtmlInputElement>().is_some() {
+                    self.session_details.code = self.input_code.cast::<HtmlInputElement>().unwrap().value();
+                }
+
+                self.session_details.password = if let Some(input) = self.input_password.cast::<HtmlInputElement>() {
+                    input.value()
+                } else {
+                    "".to_string()
+                };
+                
+                console::log_1(&format!("SessionDetails: {} {}", self.session_details.code, self.session_details.password).into());
                 self.ws_connect(ctx);
             }
             Msg::FileAccept(tag) => {
@@ -98,7 +109,12 @@ impl Component for Client {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let section_websocket = if self.web_socket.is_none() {
-            self.view_input_code(ctx)
+            if !self.password_needed || self.session_details.code.is_empty() {
+                self.view_input_code(ctx)
+            }
+            else {
+                self.view_input_password(ctx)
+            }
         }
         else {
             html! {
@@ -253,6 +269,8 @@ impl Client {
                     match session_check.unwrap().result {
                         SessionCheckResult::Success(session_host) => {
                             self.session_host = Some(session_host.clone());
+                            self.password_needed = false;
+                            self.session_details.password = String::new();
 
                             self.web_rtc_manager.deref().borrow_mut().set_state(State::Client(ConnectionState::new()));
                             let result: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
@@ -272,9 +290,11 @@ impl Client {
                         }
                         SessionCheckResult::WrongPassword => {
                             self.password_needed = true;
+                            self.ws_disconnect();
                         }
                         SessionCheckResult::NotFound => {
                             self.password_needed = false;
+                            self.session_details.code = String::new();
                             self.ws_disconnect();
                         }
                     }
@@ -298,8 +318,18 @@ impl Client {
         html! {
             <>
             <input type="text" ref={self.input_code.clone()} />
-            <button onclick={ctx.link().callback(|_| Msg::SessionConnect("".to_string()))}>{ "connect" }</button>
+            <button onclick={ctx.link().callback(|_| Msg::SessionConnect())}>{ "connect" }</button>
             </>
+        }
+    }
+
+    fn view_input_password(&self, ctx: &Context<Self>) -> Html {
+        html! {
+            <div>
+                <p>{ "Wrong password" }</p>
+                <input type="text" ref={self.input_password.clone()} />
+                <button onclick={ctx.link().callback(|_| Msg::SessionConnect())}>{ "connect" }</button>
+            </div>
         }
     }
 

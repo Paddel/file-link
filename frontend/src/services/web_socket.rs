@@ -1,3 +1,7 @@
+// This code is based on the example from the security-union's yew-websocket repository:
+// https://github.com/security-union/yew-websocket/blob/master/src/websocket.rs
+
+
 use gloo::events::EventListener;
 use yew::Callback;
 use wasm_bindgen::JsCast;

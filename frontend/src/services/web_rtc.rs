@@ -1,3 +1,7 @@
+// This code is based on the example from the Yew-WebRTC-Chat repository by codec-abc:
+// https://github.com/codec-abc/Yew-WebRTC-Chat/blob/master/src/chat/web_rtc_manager.rs
+
+
 use wasm_bindgen::{JsCast, JsValue};
 
 use std::cell::RefCell;
