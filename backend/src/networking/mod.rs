@@ -38,19 +38,15 @@ impl NetworkManager {
         stream: tokio::net::TcpStream,
         connections: Arc<RwLock<Vec<Arc<connection::Connection>>>>,
     ) {
-        let addr = stream.peer_addr().unwrap();
-    
         match accept_async(stream).await {
             Ok(ws_stream) => {
-                println!("New WebSocket connection: {}", addr);
                 let mut connections_lock = connections.write().await;
                 let connection = Arc::new(connection::Connection::new(ws_stream));
                 connections_lock.push(connection.clone());
                 Self::handle_ws_connection(connection, connections.clone()).await;
-                println!("WebSocket connection {} opened", addr);
             }
             Err(e) => {
-                eprintln!("Failed to accept WebSocket connection from {}: {}", addr, e);
+                eprintln!("Failed to accept WebSocket connection {}", e);
             }
         }
     }
@@ -76,7 +72,6 @@ impl NetworkManager {
             let mut connections_lock = connections.write().await;
             let index = connections_lock.iter().position(|c| c.get_uuid() == connection_clone.get_uuid()).unwrap();
             connections_lock.remove(index);
-            println!("WebSocket connection {} closed", connection_clone.get_uuid());
         });
     }
     
