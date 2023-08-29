@@ -2,7 +2,7 @@ use std::vec::Vec;
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tokio_tungstenite::accept_async;
 
 use crate::shared::{SessionDetails, SessionCode, SessionCheck, SessionCheckResult, SessionClient, SessionAnswerForward, SessionHostResult};
@@ -47,6 +47,7 @@ impl NetworkManager {
                 let connection = Arc::new(connection::Connection::new(ws_stream));
                 connections_lock.push(connection.clone());
                 Self::handle_ws_connection(connection, connections.clone()).await;
+                println!("WebSocket connection {} opened", addr);
             }
             Err(e) => {
                 eprintln!("Failed to accept WebSocket connection from {}: {}", addr, e);
@@ -71,6 +72,11 @@ impl NetworkManager {
                     }
                 }
             }
+
+            let mut connections_lock = connections.write().await;
+            let index = connections_lock.iter().position(|c| c.get_uuid() == connection_clone.get_uuid()).unwrap();
+            connections_lock.remove(index);
+            println!("WebSocket connection {} closed", connection_clone.get_uuid());
         });
     }
     

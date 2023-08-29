@@ -5,7 +5,6 @@ use rocket::fs::{FileServer, NamedFile};
 use rocket::{catch, catchers};
 use tokio::runtime::Runtime;
 
-mod web_interface;
 use rocket::Config;
 
 mod networking;

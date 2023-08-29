@@ -13,10 +13,9 @@ fn main() {
 
     let config: toml::Value = toml::from_str(&config_data).expect("Error parsing config file");
 
-    let server_address = config["server_address"].as_str().expect("Server address not found");
     let websocket_address = config["websocket_address"].as_str().expect("Websocket address not found");
 
     let output_path = Path::new(&env::var("OUT_DIR").unwrap()).join("config.rs");
-    write(&output_path, format!("pub const SERVER_ADDRESS: &str = \"{}\";\npub const WEBSOCKET_ADDRESS: &str = \"{}\";", server_address, websocket_address))
+    write(&output_path, format!("pub const WEBSOCKET_ADDRESS: &str = \"{}\";", websocket_address))
         .expect("Unable to write config file");
 }

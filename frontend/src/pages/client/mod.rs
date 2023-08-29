@@ -355,6 +355,7 @@ impl Client {
                     }));
                     
                     self.ws_send(data);
+                    self.ws_disconnect();
                 }
             }
         }

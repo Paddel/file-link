@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message, tungstenite::Error as TungsteniteError};
 use uuid::Uuid;
 
-use crate::shared::{SessionDetails, SessionHost};
+use crate::shared::SessionHost;
 
 struct ConnectionProperties {
     details: Option<SessionHost>,

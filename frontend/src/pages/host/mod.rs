@@ -268,7 +268,10 @@ impl Host {
                         }
                         SessionHostResult::SessionAnswerForward(session_answer_forward) => {
                             let answer = session_answer_forward.answer;
-                            let _ = WebRTCManager::validate_answer(&self.web_rtc_manager, &answer);
+                            let result = WebRTCManager::validate_answer(&self.web_rtc_manager, &answer);
+                            if result.is_ok() {
+                                self.ws_disconnect();
+                            }
                         }
                     }
                 }
@@ -306,11 +309,16 @@ impl Host {
         }
         else {
             html! {
-                <>
                 <div class="col-md-12">
+                    <label for="password">{"Enter Password (Optional):"}</label>
+                    <input type="password" id="password" placeholder="Enter Password" />
+
+                    <label for="compression-slider">{"Choose Compression Level (0-10):"}</label>
+                    <input type="range" id="compression-slider" min="0" max="10" step="1" value="5"/>
+                    <span id="slider-value">{5}</span>
+
                     <button onclick={ctx.link().callback(|_| Msg::SessionStart)}>{"connect"}</button>
                 </div>
-                </>
             }
         };
 
