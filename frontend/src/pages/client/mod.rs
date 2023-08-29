@@ -88,7 +88,6 @@ impl Component for Client {
                     "".to_string()
                 };
                 
-                console::log_1(&format!("SessionDetails: {} {}", self.session_details.code, self.session_details.password).into());
                 self.ws_connect(ctx);
             }
             Msg::FileAccept(tag) => {
@@ -226,7 +225,6 @@ impl Client {
                 
 
                 if result.unwrap() {
-                    
                     file.state = FileState::Done;
                     file.progress = 100.0;
                     for (_, file) in self.files.iter() {
@@ -350,7 +348,7 @@ impl Client {
                 }
                 FileState::Done => {
                     html! {
-                        <button onclick={ctx.link().callback(move |_| Msg::FileDownload(file_tag.clone()))}>{ "download" }</button>
+                        <button onclick={ctx.link().callback(move |_| Msg::FileDownload(file_tag.clone()))}>{ "Download" }</button>
                     }
                 }
                 FileState::Queued => {

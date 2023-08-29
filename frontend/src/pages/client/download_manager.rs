@@ -60,14 +60,12 @@ impl DownloadManager {
     fn set_callbacks(request: &web_sys::IdbOpenDbRequest, idb: Rc<RefCell<Option<IdbDatabase>>>) {
         let on_success = Closure::wrap(Box::new(move |event: web_sys::Event| {
             let db: IdbDatabase = event.target().unwrap().dyn_into::<web_sys::IdbRequest>().unwrap().result().unwrap().dyn_into().unwrap();
-            console::log_1(&format!("Success opening downloads database {}", db.version()).into());
             *idb.borrow_mut() = Some(db.clone());
         }) as Box<dyn FnMut(_)>);
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
         on_success.forget();
         
         let on_upgrade_needed = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            console::log_1(&format!("Upgrading downloads database").into());
             let db: web_sys::IdbDatabase = event.target().unwrap().dyn_into::<web_sys::IdbRequest>().unwrap().result().unwrap().dyn_into::<web_sys::IdbDatabase>().unwrap();
             if !db.object_store_names().contains(&STORE_NAME.to_string()) {
                 db.create_object_store_with_optional_parameters(
@@ -133,7 +131,6 @@ impl DownloadManager {
         if transaction.is_none() {
             return Err(JsValue::from_str("No IDB transaction"));
         }
-
 
         let transaction = transaction
             .as_ref()

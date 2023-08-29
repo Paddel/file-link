@@ -392,6 +392,17 @@ impl WebRTCManager {
         });
         Closure::wrap(function)
     }
+
+    fn transfer_array_buffer(web_rtc_manager: Rc<RefCell<Self>>, buffer: &ArrayBuffer) {
+        let data_content = js_sys::Uint8Array::new(buffer);
+        let data_decompressed = compression::decompress(data_content.to_vec()).unwrap();
+        let decompressed_js_array = js_sys::Uint8Array::from(data_decompressed.as_slice());
+        
+        web_rtc_manager.borrow().callback.emit(WebRtcMessage::Data(
+            JsValue::from(decompressed_js_array.buffer()), 
+            decompressed_js_array.byte_length()
+        ));
+    }
     
     fn on_data_channel_closure(web_rtc_manager: Rc<RefCell<Self>>) -> SingleArgClosure {
         let function: SingleArgJsFn = Box::new(move |data_channel_event: JsValue| {
@@ -403,14 +414,30 @@ impl WebRTCManager {
                     let manager = web_rtc_manager.clone();
                     Closure::wrap(Box::new(move |arg: JsValue| {
                         let data_event = arg.unchecked_into::<web_sys::MessageEvent>();
-                        let data_content = js_sys::Uint8Array::new(&data_event.data().dyn_into::<js_sys::ArrayBuffer>().unwrap());
-                        let data_decompressed = compression::decompress(data_content.to_vec()).unwrap();
-                        let decompressed_js_array = js_sys::Uint8Array::from(data_decompressed.as_slice());
+                        let buffer = data_event.data().dyn_into::<js_sys::ArrayBuffer>();
                         
-                        manager.borrow().callback.emit(WebRtcMessage::Data(
-                            JsValue::from(decompressed_js_array.buffer()), 
-                            decompressed_js_array.byte_length()
-                        ));
+                        if buffer.is_err() {
+                            let blob = data_event.data().dyn_into::<web_sys::Blob>();
+                            if blob.is_err() {
+                                console::log_1(&"Data channel received something that is not an ArrayBuffer nor a Blob".into());
+                                return;
+                            }
+
+                            let reader = web_sys::FileReader::new().unwrap();
+                            let reader_clone = reader.clone();
+                            let reader_closure = {
+                                let manager = manager.clone();
+                                Closure::wrap(Box::new(move |_: JsValue| {
+                                    let array_buffer = reader_clone.result().unwrap().dyn_into::<js_sys::ArrayBuffer>().unwrap();
+                                    Self::transfer_array_buffer(manager.clone(), &array_buffer);
+                                }) as SingleArgJsFn)
+                            };
+                            reader.set_onload(Some(reader_closure.as_ref().unchecked_ref()));
+                            reader_closure.forget();
+                            reader.read_as_array_buffer(&blob.unwrap()).unwrap();
+                        } else {
+                            Self::transfer_array_buffer(manager.clone(), &buffer.unwrap());
+                        }
                     }) as SingleArgJsFn)
                 };
                     
