@@ -1,0 +1,27 @@
+.header {
+    text-align: center;
+    background-color: #323232;
+    padding: 10px;
+}
+
+.logo {
+    width: 6.8em;
+    cursor: pointer;
+}
+
+.drop-field {
+    border: 2px solid #ccc;
+    width: 20em;
+    height: 10em;
+    text-align: center;
+    line-height: 10em;
+}
+
+.drop-field.drop-field-files {
+    cursor: grab;
+}
+
+.drop-field.drop-field-hovering {
+    /* border-color: #00f; */
+    box-shadow: 0 0 10px 5px rgba(108, 105, 131, 0.6);
+}
