@@ -37,6 +37,7 @@ impl Component for DropFiles {
             Msg::DragOver(_) | Msg::DragLeave(_) => {
                 if !Self::accepting(&msg) { return false; }
                 self.hovering = matches!(msg, Msg::DragOver(_));
+                return true;
             }
             Msg::Drop(_) => {
                 if !Self::accepting(&msg) { return false; }
@@ -46,6 +47,7 @@ impl Component for DropFiles {
                     let file_list: FileList = event.data_transfer().unwrap().files().unwrap();
                     self.handle_files(ctx, file_list);
                 }
+                return true;
             }
             Msg::PickFile => {
                 if let Some(input) = self.file_input_ref.cast::<HtmlInputElement>() {
@@ -65,7 +67,7 @@ impl Component for DropFiles {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let class = format!(
-            "drop-field drop-field-files{}",
+            "drop-field d-flex drop-field-files flex-column justify-content-center{}",
             if self.hovering { " drop-field-hovering" } else { "" }
         );
 
@@ -83,8 +85,8 @@ impl Component for DropFiles {
                         Msg::Drop(event)
                     })}
                     onclick={ctx.link().callback(|_| Msg::PickFile)}
-                >
-                    <p>{"Drop files here"}</p>
+                    >
+                    <span class="font-weight-bold text-secondary">{"Click to select or simply drop files here."}</span>
                 </div>
                 <input
                     type="file"

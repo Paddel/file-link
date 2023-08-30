@@ -44,8 +44,7 @@ impl DownloadManager {
         _= idb_factory.delete_database("downloads");
         let request = idb_factory.open_with_u32("downloads", 1)?;
         
-        Self::set_callbacks(&request, idb);
-        
+        Self::set_callbacks(&request, idb.clone());
         Ok(())
     }
 
@@ -240,5 +239,13 @@ impl DownloadManager {
         cursor.continue_()?;
 
         Ok(())
+    }
+}
+
+impl Drop for DownloadManager {
+    fn drop(&mut self) {
+        if self.idb.borrow().is_some() {
+            let _ = self.idb.borrow().as_ref().unwrap().close();
+        }
     }
 }

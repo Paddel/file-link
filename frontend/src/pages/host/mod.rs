@@ -5,13 +5,14 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use wasm_bindgen::JsCast;
 use web_sys::{console, File, HtmlInputElement};
 use yew::platform::spawn_local;
 use yew::{Html, html, Context, Component, NodeRef};
 
 use drop_files::DropFiles;
 
-use crate::file_tag::{FileState, FileTag};
+use crate::file_tag::{FileState, FileTag, convert_bytes_to_readable_format};
 use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
@@ -34,9 +35,10 @@ pub struct FileItem {
 }
 
 pub enum Msg {
+    SessionStart,
+    CopyShareLink,
     Update(Vec<File>),
     CompressionUpdate(i32),
-    SessionStart,
     TransferUpdate((FileTag, f64)),
     FileRemove(FileTag),
 
@@ -49,10 +51,12 @@ pub struct Host {
     web_rtc_state: ConnectionState,
     web_socket: Option<WsConnection>,
     files: HashMap<Uuid, FileItem>,
+    origin: String,
     code: String,
     compression_level: i32,
-    node_compression: NodeRef,
+    password: String,
     node_password: NodeRef,
+    node_share: NodeRef,
 }
 
 impl Component for Host {
@@ -61,15 +65,24 @@ impl Component for Host {
      
     
     fn create(ctx: &Context<Self>) -> Self {
+        let origin = web_sys::window()
+            .expect("no global `window` exists")
+            .location()
+            .origin()  // This gets the origin
+            .unwrap_or_else(|_| "Error getting origin".to_string());
+
+
         Host {
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
             web_rtc_state: ConnectionState::new(),
             web_socket: None,
             files: HashMap::new(),
+            origin,
             code: String::new(),
             compression_level: COMPRESSION_DEFAULT,
-            node_compression: NodeRef::default(),
+            password: String::new(),
             node_password: NodeRef::default(),
+            node_share: NodeRef::default(),
         }
     }
 
@@ -80,15 +93,23 @@ impl Component for Host {
                 true
             }
             Msg::CompressionUpdate(value) => {
-                // let event: Event = event.dyn_into().unwrap();
-                // let event_target = event.target().unwrap();
-                // let target: HtmlInputElement = event_target.dyn_into().unwrap();
-
-                // self.compression_level = target.value().parse::<i32>().unwrap();
                 self.compression_level = value;
                 true
             }
             Msg::SessionStart => {
+                self.password = if let Some(input) = self.node_password.cast::<HtmlInputElement>() {
+                    input.value()
+                } else {
+                    "".to_string()
+                };
+                
+                if let Some(state) = self.web_rtc_state.ice_gathering_state {
+                    if state == web_sys::RtcIceGatheringState::Complete {
+                        self.ws_connect(ctx);
+                        return true;
+                    }
+                }
+
                 self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
                 let _: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
                 true
@@ -113,6 +134,16 @@ impl Component for Host {
             }
             Msg::CallbackWebsocket(msg) => {
                 self.update_web_socket(ctx, msg)
+            }
+            Msg::CopyShareLink => {
+                if let Some(input) = self.node_share.cast::<web_sys::HtmlInputElement>() {
+                    input.select();
+                    // let _ = web_sys::window().unwrap().document().unwrap().exec_command("copy");
+                    let document = web_sys::window().unwrap().document().unwrap();
+                    let document = document.dyn_into::<web_sys::HtmlDocument>().unwrap();
+                    let _ = document.exec_command("copy");
+                }
+                false
             }
         }
     }
@@ -250,6 +281,7 @@ impl Host {
                                 self.ws_connect(ctx);
                             }
                         }
+                        update = true
                     }
                     
                     if connection_state.ice_connection_state != self.web_rtc_state.ice_connection_state {
@@ -267,6 +299,12 @@ impl Host {
             }
             WebRtcMessage::Reset => {
                 self.web_rtc_manager = WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc));
+                self.web_rtc_state = ConnectionState::new();
+                self.web_socket = None;
+                self.files = HashMap::new();
+                self.code = String::new();
+                self.compression_level = COMPRESSION_DEFAULT;
+                
                 false
             }
         }
@@ -296,24 +334,13 @@ impl Host {
                 update
             }
             WebSocketMessage::Open => {
-                let password = if let Some(input) = self.node_password.cast::<HtmlInputElement>() {
-                    input.value()
-                } else {
-                    "".to_string()
-                };
-
-                let compression = if let Some(input) = self.node_compression.cast::<HtmlInputElement>() {
-                    input.value().parse::<i32>().unwrap()
-                } else {
-                    COMPRESSION_DEFAULT
-                };
-
                 let offer = self.web_rtc_manager.deref().borrow_mut().create_encoded_offer();
                 let data = SessionDetails::SessionHost(SessionHost{
                     offer,
-                    password,
-                    compression: compression as u8,
+                    password: self.password.clone(),
+                    compression: self.compression_level as u8,
                 });
+
                 self.ws_send(data);
                 false
             }
@@ -329,66 +356,113 @@ impl Host {
     }
 
     fn view_session_create (&self, ctx: &Context<Self>) -> Html {
-        let section_websocket = if self.web_socket.is_some()
-        {
+        if self.web_socket.is_some() {
+            let mut href = "Loading..".to_string();
+            if !self.code.is_empty() {
+                href = format!("{}/receive/{}", self.origin, self.code);
+            }
+
             html! {
-                <>
-                    <p>{&self.code}</p>
-                </>
+                <div class="container mt-5">
+                    <div class="row justify-content-center">
+                        <div class="col-md-6">
+                            <h2 class="text-center mb-4">{"Share the link"}</h2>
+                            <div class="input-group">
+                                <input type="text" ref={self.node_share.clone()} class="form-control" value={href} readonly={true} />
+                                <div class="input-group-append">
+                                    <button onclick={ctx.link().callback(|_| Msg::CopyShareLink)} class="btn btn-outline-secondary" type="button">{"Copy"}</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             }
         }
         else {
+            let creation_disabled = self.web_rtc_state.ice_gathering_state == Some(web_sys::RtcIceGatheringState::Gathering);
             html! {
-                <div class="col-md-12">
-                    <label for="password">{"Enter Password (Optional):"}</label>
-                    <input type="password" ref={self.node_password.clone()} placeholder="Enter Password" />
+                <div class="container mt-5">
+                    <div class="row justify-content-center">
+                        <div class="col-md-6">
+                            <h2 class="text-center mb-4">{"Create a Session"}</h2>
+                            <div class="mb-3">
+                                <label for="password" class="form-label">{"Enter Password (Optional):"}</label>
+                                <input type="password" class="form-control" ref={self.node_password.clone()} placeholder="Enter Password" />
+                            </div>
+                            <div class="mb-3">
+                                <Slider label="Compression Level"
+                                    min={0} max={10}
+                                    onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value)})}
+                                    value={self.compression_level}
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <button onclick={ctx.link().callback(|_| Msg::SessionStart)} class="btn btn-primary btn-block" disabled={creation_disabled}>{"Create Session"}</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
 
-                    <Slider label="Compression Level"
-                        min={0} max={10}
-                        onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value)})}
-                        value={self.compression_level}
-                    />
-                    // <label for="compression-slider">{"Choose Compression:"}</label>
-                    // <input type="range" oninput={ctx.link().callback(|event| Msg::CompressionUpdate(event))} min="0" max="10" step="1" value="{self.compression_level}"/>
-                    // <span id="slider-value">{self.compression_level}</span>
-
-                    <button onclick={ctx.link().callback(|_| Msg::SessionStart)}>{"connect"}</button>
+    fn view_session_handle(&self, ctx: &Context<Self>) -> Html {
+        let section_table = {
+            html! {
+                <div class="table-wrapper table-responsive">
+                    <table class="table custom-table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>{"#"}</th>
+                                <th>{"Name"}</th>
+                                <th>{"Size"}</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {
+                                for self.files.iter().enumerate().map(|(index, (_, file))| {
+                                    let tag = file.tag.clone();
+                                    html! {
+                                        <tr>
+                                            <td>{index}</td>
+                                            <td class="table-name">{&tag.name()}</td>
+                                            <td>{convert_bytes_to_readable_format(tag.size() as u64)}</td>
+                                            <td>{Self::view_control_pannel(ctx, file)}</td>
+                                        </tr>
+                                    }
+                                })
+                            }
+                        </tbody>
+                    </table>
                 </div>
             }
         };
 
         html! {
-            <>
-                <div class="row">
-                    {section_websocket}
-                </div>
-            </>
-        }
-    }
-
-    fn view_session_handle(&self, ctx: &Context<Self>) -> Html {
-        html! {
-                <table class="table">
-                    <tbody>
+            <div class="container mt-5 d-flex flex-column justify-content-center align-items-center">
+                <div class="col-md-9 info-panel bg-light p-3 rounded text-center mb-3">
+                    <div class="d-flex justify-content-around align-items-center w-100">
+                        <p class="d-flex align-items-center mb-0">
+                            <span class="pl-3 pr-1 font-weight-bold">{"Connection:"}</span>
+                            <span class="text-success">{"🟢"}</span>//todo: Add timeout indicator
+                        </p>
+                        <p class="d-flex align-items-center mb-0">
+                            <span class="pl-3 pr-1 font-weight-bold">{"Password:"}</span> 
+                            <span>{format!("{}", if self.password.is_empty() {"🔓"} else {"🔒"})}</span>
+                        </p>
+                        <p class="d-flex align-items-center mb-0">
+                            <span class="pl-3 pr-1 font-weight-bold">{"Compression:"}</span> 
+                            <span>{self.compression_level}</span>
+                        </p>
+                    </div>
+                    <div class="mt-2">
                         <DropFiles onupdate={ctx.link().callback(Msg::Update)} />
-                        {
-                            for self.files.iter().enumerate().map(|(index, (_, file))| {
-                                let tag = file.tag.clone();
-                                html! {
-                                    <tr>
-                                        <td>{index}</td>
-                                        <td>{&tag.name()}</td>
-                                        <td>{tag.size()}</td>
-                                        <td>{format!("{:?}", file.state)}</td>
-                                        <td>{Self::view_control_pannel(ctx, file)}</td>
-                                        <td>{"Waiting for Receiver"}</td>
-                                    </tr>
-                                }
-                            })
-                         }
-                </tbody>
-            </table>
-        }
+                    </div>
+                </div>
+                {if self.files.len() > 0 {section_table} else {html!{}}}
+            </div>
+        }        
     }
 
     fn view_control_pannel(ctx: &Context<Self>, file: &FileItem) -> Html {
@@ -396,12 +470,16 @@ impl Host {
             FileState::Pending => {
                 let tag = file.tag.clone();
                 html! {
-                    <button onclick={ctx.link().callback(move |_| Msg::FileRemove(tag.clone()))}>{ "Remove" }</button>
+                    <button class="btn btn-outline-secondary" onclick={ctx.link().callback(move |_| Msg::FileRemove(tag.clone()))}>{ "Remove" }</button>
                 }
             }
             FileState::Transferring => {
                 html! {
-                    <p>{format!("Progress: {}%", (file.progress*100.0) as u32)}</p>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar" role="progressbar" style={format!("width: {}%", (file.progress*100.0) as u32)} aria-valuenow={format!("{}%", (file.progress*100.0) as u32)} aria-valuemin="0" aria-valuemax="100">
+                            <span style="color: white; text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.6);">{format!("Progress: {}%", (file.progress*100.0) as u32)}</span>
+                        </div>
+                    </div>
                 }
             }
             FileState::Done => {

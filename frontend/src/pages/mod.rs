@@ -12,9 +12,9 @@ pub enum Route {
     #[at("/receive/:code")]
     ReceiveCode { code: String },
     #[at("/receive")]
-    Receive,
+    Client,
     #[at("/send")]
-    Send,
+    Host,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -23,9 +23,9 @@ pub enum Route {
 pub fn switch(route: Route) -> Html {
     match route {
         Route::Home => html! { <home::Home /> },
-        Route::Receive => html! { <client::Client /> },
+        Route::Client => html! { <client::Client /> },
         Route::ReceiveCode { code } => html! { <client::Client {code} /> },
-        Route::Send => html! { <host::Host /> },
+        Route::Host => html! { <host::Host /> },
         Route::NotFound => html! { <home::Home /> },
     }
 }

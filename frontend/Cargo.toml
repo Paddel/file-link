@@ -17,12 +17,14 @@ gloo = { version = "0.10.0", optional = false }
 js-sys = "0.3.64"
 reqwest = {version="0.11.19", features=["json"]}
 serde = "1"
+serde-wasm-bindgen = "0.5.0"
 serde_derive = "1"
 serde_json = "1"
 thiserror = "1.0.47"
 uuid = {version="1.4.1", features=["v4", "fast-rng", "macro-diagnostics", "serde"]}
 wasm-bindgen = "^0.2"
 wasm-bindgen-futures = "0.4.37"
+wasm-timer = "0.2.5"
 yew = { version="0.20.0", features=["csr", "ssr"] }
 yew-router = "0.17.0"
 zstd = { path = "zstd", version = "=0.10.1", default-features = false }
@@ -36,12 +38,12 @@ version = "0.3.64"
 features = [
   'Blob',
   'DataTransfer',
-  'DomStringList',
   'Document',
+  'DomStringList',
   'Element',
   'HtmlAnchorElement',
-  'HtmlElement',
   'HtmlDocument',
+  'HtmlElement',
   'IdbCursorWithValue',
   'IdbDatabase',
   'IdbFactory',
@@ -51,8 +53,8 @@ features = [
   'IdbOpenDbRequest',
   'IdbTransaction',
   'IdbTransactionMode',
+  'MediaStreamTrack',
   'Node',
-  'Window',
   'RtcAnswerOptions',
   'RtcCertificate',
   'RtcCertificateExpiration',
@@ -69,6 +71,8 @@ features = [
   'RtcIceCandidatePairStats',
   'RtcIceCandidateStats',
   'RtcIceComponentStats',
+  'RtcIceConnectionState',
+  'RtcIceGatheringState',
   'RtcIceServer',
   'RtcIdentityAssertion',
   'RtcIdentityAssertionResult',
@@ -99,6 +103,7 @@ features = [
   'RtcRtpTransceiver',
   'RtcRtpTransceiverInit',
   'RtcRtxParameters',
+  'RtcSdpType',
   'RtcSessionDescription',
   'RtcSessionDescriptionInit',
   'RtcStats',
@@ -107,11 +112,9 @@ features = [
   'RtcTrackEvent',
   'RtcTrackEventInit',
   'RtcTransportStats',
-  'RtcIceConnectionState',
-  'RtcIceGatheringState',
-  'RtcSdpType',
   'RtcdtmfSender',
   'RtcdtmfToneChangeEvent',
   'RtcdtmfToneChangeEventInit',
   'RtcrtpContributingSourceStats',
+  'Window',
 ]
