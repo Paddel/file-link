@@ -1353,7 +1353,7 @@
     }
 
     async function main() {
-       await __wbg_init('/public/file_link_frontend_bg.wasm');
+       await __wbg_init('public/file_link_frontend_bg.wasm');
        run_app();
     }
     main();

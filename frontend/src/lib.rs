@@ -16,7 +16,7 @@ pub fn header() -> Html {
     html! {
         <div class="header">
             <img
-            src="/public/static/logo.svg"
+            src="public/static/logo.svg"
             class="logo"
             alt="Logo"
             onclick={Callback::from(move |_| navigator.push(&Route::Home))}

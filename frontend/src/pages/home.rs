@@ -15,8 +15,8 @@ pub fn Home() -> Html {
                 <div class="m-2">
                     <button class="btn btn-light btn-block square-button bouncing-trigger" onclick={Callback::from(move |_| navigator.push(&Route::Host))}>
                         <div class="svg-container">
-                            <img src="/public/static/icons/base.svg" class="svg-base"/>
-                            <img src="/public/static/icons/upload.svg" class="svg-overlay bouncing"/>
+                            <img src="public/static/icons/base.svg" class="svg-base"/>
+                            <img src="public/static/icons/upload.svg" class="svg-overlay bouncing"/>
                         </div>
                         <hr class="w-50 mx-auto my-2" />
                         {"Send"}
@@ -25,8 +25,8 @@ pub fn Home() -> Html {
                 <div class="m-2">
                     <button class="btn btn-light btn-block square-button bouncing-trigger" onclick={Callback::from(move |_| nav_clone.push(&Route::Client))}>
                         <div class="svg-container">
-                            <img src="/public/static/icons/base.svg" class="svg-base"/>
-                            <img src="/public/static/icons/download.svg" class="svg-overlay bouncing"/>
+                            <img src="public/static/icons/base.svg" class="svg-base"/>
+                            <img src="public/static/icons/download.svg" class="svg-overlay bouncing"/>
                         </div>
                         <hr class="w-50 mx-auto my-2" />
                         {"Receive"}
