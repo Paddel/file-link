@@ -4,6 +4,11 @@ A simple full-stack Rust Webapplication facilitating peer-to-peer file transfers
 !GIF
 
 ### Dependencies:
+zlib is provided as a git submodule, so clone this project with:
+`git clone --recursive https://github.com/Paddel/file-link.git`
+or download zlib for an already cloned repository with:
+`git submodule update --init --recursive`
+
 Install and add the following to your system's PATH environment variable:
 - Clang > 16.0.0
 - openssl > OpenSSL 1.1
