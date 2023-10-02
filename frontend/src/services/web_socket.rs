@@ -4,7 +4,7 @@
 
 use gloo::events::EventListener;
 use yew::Callback;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{BinaryType, Event, MessageEvent, WebSocket};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,11 +26,23 @@ impl WsConnection {
     pub fn new(url: &str, callback: Callback<WebSocketMessage>) -> Result<Self, anyhow::Error> {
         let ws = WebSocket::new(url).map_err(|err| {
             let js_error = err.unchecked_into::<js_sys::Error>().to_string().as_string().unwrap();
+            let window = web_sys::window().ok_or(JsValue::from_str("No global `window` exists")).unwrap();
+            window.alert_with_message(&js_error).expect("alert failed");
             anyhow::Error::msg(js_error)
         })?;
 
         ws.set_binary_type(BinaryType::Arraybuffer);
 
+        let event_listeners = Self::init_callbacks(&ws, callback.clone());
+
+        Ok(WsConnection {
+            ws: Some(ws),
+            callback: Some(callback),
+            event_listeners,
+        })
+    }
+
+    fn init_callbacks(ws: &WebSocket, callback: Callback<WebSocketMessage>) -> Vec<EventListener> {
         let mut event_listeners = Vec::new();
 
         {
@@ -69,11 +81,7 @@ impl WsConnection {
             event_listeners.push(on_message);
         }
 
-        Ok(WsConnection {
-            ws: Some(ws),
-            callback: Some(callback),
-            event_listeners,
-        })
+        event_listeners
     }
 
     pub fn send_text(&mut self, text: &str) {
