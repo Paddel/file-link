@@ -9,14 +9,14 @@ fn main() {
         .arg("--target")
         .arg("web")
         .arg("--out-dir")
-        .arg("../public")
+        .arg("../public/wasm")
         .current_dir(&frontend_path)
         .status()
         .expect("Failed to run wasm-pack build");
 
     assert!(status.success());
     
-    let rollup_command = "rollup ../frontend/main.js --format iife --file ../public/bundle.js";
+    let rollup_command = "rollup ../frontend/main.js --format iife --file ../public/js/bundle.js";
     let output = Command::new("cmd")
         .args(&["/C", &rollup_command])
         .output()

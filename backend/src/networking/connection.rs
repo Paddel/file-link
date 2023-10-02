@@ -10,8 +10,6 @@ use uuid::Uuid;
 
 use crate::shared::SessionHost;
 
-const CODE_CHAR_SET: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
-
 struct ConnectionProperties {
     details: Option<SessionHost>,
     code: Option<String>,
@@ -41,6 +39,8 @@ impl Connection {
     }
 
     pub async fn generate_code(&self) -> String {
+        const CODE_CHAR_SET: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
+        
         let code: String = (0..10)
             .map(|_| {
                 let idx = rand::thread_rng().gen_range(0..CODE_CHAR_SET.len());

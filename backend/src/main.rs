@@ -1,8 +1,9 @@
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
+use std::fs;
 
-use rocket::fs::{FileServer, NamedFile};
-use rocket::{catch, catchers};
+use rocket::fs::NamedFile;
+use rocket::{get, routes};
 use tokio::runtime::Runtime;
 
 use rocket::Config;
@@ -14,28 +15,36 @@ pub mod shared {
     include!("../../shared/ws_protocol.rs");
 }
 
-const BASE_PATH: &str = "./public/static/";
+const BASE_PATH: &str = "./public/";
 static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(BASE_PATH).join("index.html"));
 
-#[catch(default)]
-pub async fn index() -> Option<NamedFile> {
+#[get("/")]
+async fn root() -> Option<NamedFile> {
     NamedFile::open(&*INDEX_PATH).await.ok()
+}
+
+#[get("/<path..>")]
+async fn catch_all(path: PathBuf) -> Option<NamedFile> {
+    let path = match fs::metadata(path.clone()) {
+        Ok(_) => &path,
+        Err(_) => &*INDEX_PATH,
+    };
+
+    NamedFile::open(&path).await.ok()
 }
 
 fn main() {
     let config = Config {
         address: "0.0.0.0".parse().unwrap(),
-        port: 8000,
+        port: 80,
         ..Config::default()
     };
-
     
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
         networking::NetworkManager::initialize_networking();
         rocket::custom(config)
-            .mount("/public", FileServer::from("./public"))
-            .register("/", catchers![index])
+            .mount("/", routes![root, catch_all])
             .launch()
             .await
             .unwrap();

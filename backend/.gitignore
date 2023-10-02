@@ -1,4 +1,5 @@
 target/
 certs/
-public/*
-!public/static/
+
+*.d.ts
+*.wasm
