@@ -531,6 +531,7 @@ dependencies = [
  "getrandom",
  "gloo 0.10.0",
  "js-sys",
+ "once_cell",
  "reqwest",
  "serde",
  "serde-wasm-bindgen",

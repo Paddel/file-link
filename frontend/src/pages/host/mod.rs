@@ -15,13 +15,13 @@ use drop_files::DropFiles;
 use crate::file_tag::{FileState, FileTag, convert_bytes_to_readable_format};
 use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
+use crate::shared::FRONTEND_CONFIG;
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
 
 mod drop_files;
 mod slider;
 
-include!(concat!(env!("OUT_DIR"), "/config.rs"));
 include!("../../../../shared/ws_protocol.rs");
 
 const COMPRESSION_DEFAULT: i32 = 9;
@@ -242,7 +242,8 @@ impl Host {
 
     fn ws_connect(&mut self, ctx: &Context<Self>) {
         let callback = ctx.link().callback(Msg::CallbackWebsocket);
-        self.web_socket = WsConnection::new(WEBSOCKET_ADDRESS, callback).ok();
+        let frontend_config = &*FRONTEND_CONFIG;
+        self.web_socket = WsConnection::new(&frontend_config.websocket_address, callback).ok();
     }
 
     fn ws_disconnect(&mut self) {

@@ -19,6 +19,7 @@ serde_json = "1.0.105"
 tokio = { version = "1", features = ["full"] }
 tokio-tls = "0.3.1"
 tokio-tungstenite = "0.20.0"
+toml = "0.7.6"
 tungstenite = "0.20.0"
 turn = "0.6.1"
 

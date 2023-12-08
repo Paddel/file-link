@@ -17,7 +17,6 @@ use crate::wrtc_protocol::{FilesUpdate, FileRequest};
 
 mod download_manager;
 
-include!(concat!(env!("OUT_DIR"), "/config.rs"));
 include!("../../../../shared/ws_protocol.rs");
 
 pub struct FileItem {
@@ -213,7 +212,7 @@ impl Client {
 
     fn ws_connect(ctx: &Context<Self>) -> Option<WsConnection> {
         let callback = ctx.link().callback(Msg::CallbackWebsocket);
-        WsConnection::new(WEBSOCKET_ADDRESS, callback).ok()
+        WsConnection::new("ws://localhost:9000", callback).ok()
     }
 
     fn ws_disconnect(&mut self) {

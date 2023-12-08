@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tokio_tungstenite::accept_async;
 
 use crate::shared::{SessionDetails, SessionCode, SessionCheck, SessionCheckResult, SessionClient, SessionAnswerForward, SessionHostResult};
+use crate::shared::BACKEND_CONFIG;
 
 mod connection;
 
@@ -21,8 +22,11 @@ impl NetworkManager {
     }
 
     pub async fn start_signaling_server(&self) {
-        let addr = "0.0.0.0:9000";
-        let listener = TcpListener::bind(addr).await.expect("Failed to bind");
+        let backend_config = &*BACKEND_CONFIG;
+        let ws_bind_addr = backend_config.ws_bind_addr.clone();
+        let ws_port = backend_config.ws_port;
+        let addr = format!("{}:{}", ws_bind_addr, ws_port);
+        let listener = TcpListener::bind(addr.clone()).await.expect("Failed to bind");
         println!("WebSocket server started at ws://{}", addr);
 
         loop {

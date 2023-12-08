@@ -9,6 +9,13 @@ mod pages;
 mod services;
 mod wrtc_protocol;
 
+pub mod shared {
+    use serde::{Deserialize, Serialize};
+    use toml;
+    include!("../../shared/ws_protocol.rs");
+    include!("../../shared/config.rs");
+}
+
 #[function_component(Header)]
 pub fn header() -> Html {
     let navigator = use_navigator().unwrap();
