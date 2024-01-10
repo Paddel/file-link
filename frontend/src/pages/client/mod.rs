@@ -190,7 +190,7 @@ impl Client {
         let file_item = match file_item {
             Some(item) => item,
             None => return false,
-        };                
+        };
 
         if self.download_manager.active() {
             file_item.state = FileState::Queued;

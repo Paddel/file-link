@@ -51,7 +51,7 @@ impl Connection {
         properties.code = Some(code.clone());
         code
     }
-    
+
     pub async fn get_code(&self) -> Option<String> {
         let properties = self.properties.read().await;
         properties.code.clone()
@@ -61,7 +61,7 @@ impl Connection {
         let properties = self.properties.read().await;
         properties.details.as_ref().map(|details| details.password.clone())
     }
-    
+
     pub async fn get_details(&self) -> Option<SessionHost> {
         let properties = self.properties.read().await;
         properties.details.as_ref().cloned()
