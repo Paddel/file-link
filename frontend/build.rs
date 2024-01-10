@@ -1,21 +1,38 @@
-extern crate toml;
-
-// use std::fs::File;
-// use std::io::Read;
-// use std::env;
-// use std::path::Path;
-// use std::fs::write;
+use std::process::Command;
+use std::path::Path;
+use std::fs;
 
 fn main() {
-    // let mut config_file = File::open("../config.toml").expect("Config file not found");
-    // let mut config_data = String::new();
-    // config_file.read_to_string(&mut config_data).expect("Unable to read config file");
+    let frontend_path = Path::new("../frontend");
+    let output_path = Path::new("../target/wasm");
+    let js_path = Path::new("../public/js");
+    
+    let status = Command::new("wasm-pack")
+        .arg("build")
+        .arg("--target")
+        .arg("web")
+        .arg("--out-dir")
+        .arg(output_path)
+        .current_dir(&frontend_path)
+        .status()
+        .expect("Failed to run wasm-pack build");
 
-    // let config: toml::Value = toml::from_str(&config_data).expect("Error parsing config file");
+    assert!(status.success());
 
-    // let websocket_address = config["websocket_address"].as_str().expect("Websocket address not found");
+    fs::copy(output_path.join("file_link_frontend_bg.wasm"), js_path.join("file_link_frontend_bg.wasm"))
+        .expect("Failed to copy WASM file to /public/js");
 
-    // let output_path = Path::new(&env::var("OUT_DIR").unwrap()).join("config.rs");
-    // write(&output_path, format!("pub const WEBSOCKET_ADDRESS: &str = \"{}\";", websocket_address))
-    //     .expect("Unable to write config file");
-}
+    fs::copy(output_path.join("file_link_frontend.js"), js_path.join("file_link.js"))
+        .expect("Failed to copy WASM JS file to /public/js");
+
+    let rollup_command = format!("rollup  {}/main.js --format iife --file {}/bundle.js", frontend_path.to_string_lossy(), js_path.to_string_lossy());
+    let output = Command::new("cmd")
+        .args(&["/C", &rollup_command])
+        .output()
+        .expect("Failed to execute command");
+
+    if !output.status.success() {
+        eprintln!("Rollup command failed with output:\n{}", String::from_utf8_lossy(&output.stderr));
+        std::process::exit(1);
+    }
+} 
