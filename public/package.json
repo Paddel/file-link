@@ -1,0 +1,15 @@
+{
+  "name": "file-link-frontend",
+  "version": "0.1.0",
+  "license": "MIT/Apache-2.0",
+  "files": [
+    "file_link_frontend_bg.wasm",
+    "file_link_frontend.js",
+    "file_link_frontend.d.ts"
+  ],
+  "module": "file_link_frontend.js",
+  "types": "file_link_frontend.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

@@ -97,21 +97,21 @@ impl Component for Host {
                 true
             }
             Msg::SessionStart => {
-                // self.password = if let Some(input) = self.node_password.cast::<HtmlInputElement>() {
-                //     input.value()
-                // } else {
-                //     "".to_string()
-                // };
+                self.password = if let Some(input) = self.node_password.cast::<HtmlInputElement>() {
+                    input.value()
+                } else {
+                    "".to_string()
+                };
                 
-                // if let Some(state) = self.web_rtc_state.ice_gathering_state {
-                //     if state == web_sys::RtcIceGatheringState::Complete {
-                //         self.ws_connect(ctx);
-                //         return true;
-                //     }
-                // }
+                if let Some(state) = self.web_rtc_state.ice_gathering_state {
+                    if state == web_sys::RtcIceGatheringState::Complete {
+                        self.ws_connect(ctx);
+                        return true;
+                    }
+                }
 
-                // self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
-                // let _: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
+                self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
+                let _: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
                 true
             }
             Msg::TransferUpdate((file_tag, progress)) => {
@@ -398,7 +398,7 @@ impl Host {
                                 />
                             </div>
                             <div class="mb-3">
-                                // <button onclick={ctx.link().callback(|_| Msg::SessionStart)} class="btn btn-primary btn-block" disabled={creation_disabled}>{"Create Session"}</button>
+                                <button onclick={ctx.link().callback(|_| Msg::SessionStart)} class="btn btn-primary btn-block" disabled={creation_disabled}>{"Create Session"}</button>
                             </div>
                         </div>
                     </div>
