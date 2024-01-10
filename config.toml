@@ -4,3 +4,4 @@ ws_port = 9000
 
 [frontend_config]
 websocket_address = "ws://localhost:9000"
+api_ddress="localhost:3000"
