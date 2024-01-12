@@ -18,6 +18,7 @@ use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
 use crate::shared::FRONTEND_CONFIG;
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
+use crate::services::api_service::ApiService;
 
 mod drop_files;
 mod slider;
@@ -47,6 +48,7 @@ pub enum Msg {
 }
 
 pub struct Host {
+    api_service: ApiService,
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     web_rtc_state: ConnectionState,
     web_socket: Option<WsConnection>,
@@ -73,6 +75,7 @@ impl Component for Host {
 
 
         Host {
+            api_service: ApiService::new(),
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
             web_rtc_state: ConnectionState::new(),
             web_socket: None,
@@ -341,8 +344,9 @@ impl Host {
                     password: self.password.clone(),
                     compression: self.compression_level as u8,
                 });
-
-                self.ws_send(data);
+                let result = || {};
+                // self.ws_send(data);
+                ApiService::post_session(result, &self.password, self.compression_level);
                 false
             }
             WebSocketMessage::Close => {

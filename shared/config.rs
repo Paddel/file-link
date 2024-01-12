@@ -30,7 +30,7 @@ pub struct BackendConfig {
 #[derive(Debug, Deserialize)]
 pub struct FrontendConfig {
     pub websocket_address: String,
-    pub api_ddress: String,
+    pub api_address: String,
 }
 
 fn load_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box<dyn std::error::Error>> {
