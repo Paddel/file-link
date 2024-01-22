@@ -27,7 +27,7 @@ impl DownloadManager {
         let idb = Rc::new(RefCell::new(None));
         
         if let Err(_) = Self::setup_idb(idb.clone()) {
-            console::log_1(&JsValue::from_str(&format!("Error setting up IDB")));
+            console::log_1(&JsValue::from_str(&"Error setting up IDB"));
         }
 
         Self {

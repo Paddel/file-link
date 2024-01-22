@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{console, File, HtmlInputElement};
 use yew::platform::spawn_local;
 use yew::{Html, html, Context, Component, NodeRef};
@@ -108,13 +108,18 @@ impl Component for Host {
                 
                 if let Some(state) = self.web_rtc_state.ice_gathering_state {
                     if state == web_sys::RtcIceGatheringState::Complete {
+
+                        console::log_1(&JsValue::from_str(&"ws_connect"));
                         self.ws_connect(ctx);
                         return true;
                     }
                 }
-
+                
                 self.web_rtc_manager.deref().borrow_mut().set_state(State::Server(ConnectionState::new()));
-                let _: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
+                let result: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
+                if result.is_err() {
+                    console::log_1(&result.err().unwrap());
+                }
                 true
             }
             Msg::TransferUpdate((file_tag, progress)) => {
@@ -276,13 +281,17 @@ impl Host {
                 false
             }
             WebRtcMessage::UpdateState(state) => {
+                console::log_1(&format!("UpdateState").into());
                 let mut update = false;
                 if let State::Server(connection_state) = state.clone() {
                     // console::log_1(&format!("UpdateState {:?}", connection_state).into());
                     if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
                         if let Some(state) = connection_state.ice_gathering_state {
                             if state == web_sys::RtcIceGatheringState::Complete {
-                                self.ws_connect(ctx);
+                                console::log_1(&format!("UpdateState connect").into());
+                                // self.ws_connect(ctx);
+                                let result = || {};
+                                ApiService::post_session(result, &self.password, self.compression_level);
                             }
                         }
                         update = true
@@ -291,12 +300,14 @@ impl Host {
                     if connection_state.ice_connection_state != self.web_rtc_state.ice_connection_state {
                         if let Some(state) = connection_state.ice_connection_state {
                             if state == web_sys::RtcIceConnectionState::Connected ||
-                                state == web_sys::RtcIceConnectionState::Disconnected {
+                            state == web_sys::RtcIceConnectionState::Disconnected {
+                                console::log_1(&format!("UpdateState update").into());
                                 update = true;
                             }
                         }
                     }
-
+                    
+                    console::log_1(&format!("UpdateState done").into());
                     self.web_rtc_state = connection_state;
                 };
                 update
@@ -344,9 +355,8 @@ impl Host {
                     password: self.password.clone(),
                     compression: self.compression_level as u8,
                 });
-                let result = || {};
-                // self.ws_send(data);
-                ApiService::post_session(result, &self.password, self.compression_level);
+
+                self.ws_send(data);
                 false
             }
             WebSocketMessage::Close => {
