@@ -4,9 +4,12 @@ use std::path::PathBuf;
 
 use rocket::Config;
 use rocket::fs::NamedFile;
+// use rocket::response::status::NotFound;
+use rocket::http::Status;
 use rocket::{get, post, routes};
 use tokio::runtime::Runtime;
 use crate::shared::SessionCreate;
+use unescape::unescape;
 
 mod networking;
 
@@ -37,25 +40,27 @@ async fn catch_all(path: PathBuf) -> Option<NamedFile> {
 }
 
 #[post("/api/sessions", data = "<data>")]
-async fn create_session(data: String) -> String {
+async fn create_session(data: String) -> Result<String, Status> {
+    let data = unescape_quotes(&data);
     let session_create = serde_json::from_str::<SessionCreate>(&data);
-    if session_create.is_err() {
-        println!("Error: {:?}", session_create.err());
-        return String::new();
-    }
-
-    //next step: check how to return error codes
-
-    let session_create = session_create.unwrap();
+    let session_create = match session_create {
+        Ok(session_create) => session_create,
+        Err(_) => return Err(Status::BadRequest),
+    };
+    
     println!("Session create: {:?}", session_create);
-    data
+    Ok(data)
+}
+
+fn unescape_quotes(s: &str) -> String {
+    let s = s.trim_matches('"');
+    unescape(s).unwrap()
 }
 
 fn main() {
     let config = Config {
         ..Config::default()
     };
-
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
         networking::NetworkManager::initialize_networking();

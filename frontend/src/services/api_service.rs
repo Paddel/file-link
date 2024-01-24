@@ -17,12 +17,12 @@ impl ApiService {
     pub fn post_session(callback: impl FnOnce(), password: &str, compression_level: i32) {
         let session_create = SessionCreate {
             compression_level: compression_level as u8,
-            password: password.to_string(),
+            password: "ab".to_string(),
         };
         let session_create_str = serde_json::to_string(&session_create).expect("Serialization failed");
-        let url: String = Self::get_host_address() + "/api/sessions";
+        let url = Self::get_host_address() + "/api/sessions";
+        console::log_1(&JsValue::from_str(&format!("session_create_str: {}", session_create_str)));
         let request = Request::post(&url).json(&session_create_str);
-        
         ApiService::execute_api_call(callback, request);
     }
 
