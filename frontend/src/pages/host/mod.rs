@@ -16,16 +16,17 @@ use crate::file_tag::{FileState, FileTag, convert_bytes_to_readable_format};
 use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
 use crate::shared::FRONTEND_CONFIG;
+use crate::shared::{SessionCreateResult, SessionJoinResult};
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
-use crate::services::api_service::ApiService;
+use crate::services::api_service::{api_service, ApiServiceMessage};
 
 mod drop_files;
 mod slider;
 
 include!("../../../../shared/ws_protocol.rs");
 
-const COMPRESSION_DEFAULT: i32 = 9;
+const COMPRESSION_DEFAULT: u8 = 9;
 
 #[derive(Clone)]
 pub struct FileItem {
@@ -39,23 +40,23 @@ pub enum Msg {
     SessionStart,
     CopyShareLink,
     Update(Vec<File>),
-    CompressionUpdate(i32),
+    CompressionUpdate(u8),
     TransferUpdate((FileTag, f64)),
     FileRemove(FileTag),
 
     CallbackWebRtc(WebRtcMessage),
+    CallbackApi(ApiServiceMessage),
     CallbackWebsocket(WebSocketMessage),
 }
 
 pub struct Host {
-    api_service: ApiService,
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     web_rtc_state: ConnectionState,
     web_socket: Option<WsConnection>,
     files: HashMap<Uuid, FileItem>,
     origin: String,
     code: String,
-    compression_level: i32,
+    compression_level: u8,
     password: String,
     node_password: NodeRef,
     node_share: NodeRef,
@@ -75,7 +76,6 @@ impl Component for Host {
 
 
         Host {
-            api_service: ApiService::new(),
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
             web_rtc_state: ConnectionState::new(),
             web_socket: None,
@@ -139,6 +139,9 @@ impl Component for Host {
             }
             Msg::CallbackWebRtc(msg) => {
                 self.update_web_rtc(ctx, msg)
+            }
+            Msg::CallbackApi(msg) => {
+                self.update_api_service(ctx, msg)
             }
             Msg::CallbackWebsocket(msg) => {
                 self.update_web_socket(ctx, msg)
@@ -290,8 +293,9 @@ impl Host {
                             if state == web_sys::RtcIceGatheringState::Complete {
                                 console::log_1(&format!("UpdateState connect").into());
                                 // self.ws_connect(ctx);
-                                let result = || {};
-                                ApiService::post_session(result, &self.password, self.compression_level);
+                                let callback = ctx.link().callback(Msg::CallbackApi);
+                                let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
+                                api_service::create_session(callback, answer, self.password.clone(), self.compression_level);
                             }
                         }
                         update = true
@@ -322,6 +326,20 @@ impl Host {
                 
                 false
             }
+        }
+    }
+
+    fn update_api_service(&mut self, _ctx: &Context<Self>, msg: ApiServiceMessage) -> bool {
+        match msg {
+            ApiServiceMessage::SessionCreate(result) => {
+                if result.is_err() {
+                    return false;
+                }
+                let result = result.unwrap();
+                self.code = result.code;
+                true
+            },
+            _ => false,
         }
     }
 
@@ -371,11 +389,8 @@ impl Host {
     }
 
     fn view_session_create (&self, ctx: &Context<Self>) -> Html {
-        if self.web_socket.is_some() {
-            let mut href = "Loading..".to_string();
-            if !self.code.is_empty() {
-                href = format!("{}/receive/{}", self.origin, self.code);
-            }
+        if !self.code.is_empty() {
+            let url = format!("{}/receive/{}", self.origin, self.code);
 
             html! {
                 <div class="container mt-5">
@@ -383,7 +398,7 @@ impl Host {
                         <div class="col-md-6">
                             <h2 class="text-center mb-4">{"Share the link"}</h2>
                             <div class="input-group">
-                                <input type="text" ref={self.node_share.clone()} class="form-control" value={href} readonly={true} />
+                                <input type="text" ref={self.node_share.clone()} class="form-control" value={url} readonly={true} />
                                 <div class="input-group-append">
                                     <button onclick={ctx.link().callback(|_| Msg::CopyShareLink)} class="btn btn-outline-secondary" type="button">{"Copy"}</button>
                                 </div>
@@ -407,8 +422,8 @@ impl Host {
                             <div class="mb-3">
                                 <Slider label="Compression Level"
                                     min={0} max={10}
-                                    onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value)})}
-                                    value={self.compression_level}
+                                    onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value as u8)})}
+                                    value={self.compression_level as i32}
                                 />
                             </div>
                             <div class="mb-3">

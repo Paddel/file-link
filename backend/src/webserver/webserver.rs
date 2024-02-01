@@ -1,27 +1,23 @@
+use std::sync::RwLock;
+
 use rocket::{routes, Config};
 use tokio::runtime::Runtime;
 use unescape::unescape;
 use super::routing::*;
 
+use super::session_manager::SessionManager;
 
-pub struct Webserver {
-    
-}
+pub mod webserver {
+    use super::*;
 
-impl Webserver {
-    pub fn new() -> Self {
-        Self {
-            
-        }
-    }
-
-    pub fn run(&mut self) {
+    pub fn run() {
         let config = Config {
             ..Config::default()
         };
         let rt = Runtime::new().unwrap();
         rt.block_on(async {
             rocket::custom(config)
+                .manage(RwLock::new(SessionManager::new()))
                 .mount("/", routes![root, create_session, catch_all])
                 .launch()
                 .await

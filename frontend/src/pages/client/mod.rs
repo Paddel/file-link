@@ -11,9 +11,11 @@ use yew::prelude::*;
 use download_manager::DownloadManager;
 
 use crate::file_tag::{FileTag, FileState, convert_bytes_to_readable_format};
+use crate::services::api_service::{api_service, ApiServiceMessage};
 use crate::services::web_rtc::{WebRTCManager, WebRtcMessage, State, ConnectionState};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
 use crate::wrtc_protocol::{FilesUpdate, FileRequest};
+use crate::shared::SessionJoinResult;
 
 mod download_manager;
 
@@ -31,6 +33,7 @@ pub enum Msg {
     FileDownload(FileTag),
 
     CallbackWebRtc(WebRtcMessage),
+    CallbackApi(ApiServiceMessage),
     CallbackWebsocket(WebSocketMessage),
 }
 
@@ -44,11 +47,10 @@ pub struct Client {
     download_manager: DownloadManager,
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     web_rtc_state: ConnectionState,
-    web_socket: Option<WsConnection>,
     files: HashMap<Uuid, FileItem>,
-    session_details: SessionFetchOffer,
+    session_details: Option<SessionJoinResult>,
+    session_code: Option<String>,
     password_needed: bool,
-    compression_level: u8,
     fetchin_file: Option<FileTag>,
     input_code: NodeRef,
     input_password: NodeRef,
@@ -60,21 +62,22 @@ impl Component for Client {
 
     fn create(ctx: &Context<Self>) -> Self {
         //Direct connect if code is provided
-        let code = ctx.props().code.clone();
-        let mut web_socket = None;
-        if !code.is_empty() {
-            web_socket = Self::ws_connect(ctx);
-        }
+
+        let code = if !ctx.props().code.is_empty() {
+            //TODO: join
+            Some(ctx.props().code.clone())
+        } else {
+            None
+        };
         
         Self {
             download_manager: DownloadManager::new(),
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
             web_rtc_state: ConnectionState::new(),
-            web_socket,
             files: HashMap::new(),
-            session_details: SessionFetchOffer {code, password: String::new()},
+            session_details: None,
+            session_code: code,
             password_needed: false,
-            compression_level: 0,
             input_code: NodeRef::default(),
             input_password: NodeRef::default(),
             fetchin_file: None,
@@ -86,39 +89,47 @@ impl Component for Client {
             Msg::SessionConnect => {
                 if self.input_code.cast::<HtmlInputElement>().is_some() {
                     let link = self.input_code.cast::<HtmlInputElement>().unwrap().value();
-                    self.session_details.code = match Self::extract_code_from_link(&link) {
-                        Some(code) => code.to_string(),
-                        None => link,
-                    }
+                    self.session_code = Self::extract_code_from_link(&link).map(|code| code.to_string());
                 }
 
-                self.session_details.password = if let Some(input) = self.input_password.cast::<HtmlInputElement>() {
-                    input.value()
+                let session_code = match &self.session_code {
+                    Some(code) => code,
+                    None => return false,
+                };
+
+                //get password if available (option)
+                let password = if self.input_password.cast::<HtmlInputElement>().is_some() {
+                    Some(self.input_password.cast::<HtmlInputElement>().unwrap().value())
                 } else {
-                    "".to_string()
+                    None
                 };
                 
-                // self.download_manager = DownloadManager::new();
-                self.web_socket = Self::ws_connect(ctx);
+                let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
+                api_service::join_session(callback, session_code, password);
+                true
             }
             Msg::FileAccept(tag) => {
-                return self.handle_file_accept(tag);
+                self.handle_file_accept(tag)
             }
             Msg::FileDownload(tag) => {
                 self.download_manager.download(tag);
+                true
             }
             Msg::CallbackWebRtc(msg) => {
-                self.update_web_rtc(ctx, msg);
+                self.update_web_rtc(ctx, msg)
+            }
+            Msg::CallbackApi(msg) => {
+                self.update_api(ctx, msg)
             }
             Msg::CallbackWebsocket(msg) => {
-                self.update_web_socket(ctx, msg);
+                self.update_web_socket(ctx, msg)
             }
         }
-        true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if self.web_rtc_connected() {
+        if self.web_rtc_connected() && self.session_details.is_some() {
+            let session_details = self.session_details.as_ref().unwrap();
             let section_table = {
                 html! {
                     <div class="table-wrapper table-responsive">
@@ -153,11 +164,11 @@ impl Component for Client {
                             </p>
                             <p class="d-flex align-items-center mb-0">
                                 <span class="pl-3 pr-1 font-weight-bold">{"Password:"}</span> 
-                                <span>{format!("{}", if self.session_details.password.is_empty() {"🔓"} else {"🔒"})}</span>
+                                <span>{format!("{}", if session_details.has_password {"🔓"} else {"🔒"})}</span>
                             </p>
                             <p class="d-flex align-items-center mb-0">
                                 <span class="pl-3 pr-1 font-weight-bold">{"Compression:"}</span> 
-                                <span>{self.compression_level}</span>
+                                <span>{session_details.compression_level}</span>
                             </p>
                         </div>
                     </div>
@@ -165,20 +176,11 @@ impl Component for Client {
                 </div>
             }
         } else {
-                if self.web_socket.is_none() {
-                    if !self.password_needed || self.session_details.code.is_empty() {
-                        self.view_input_code(ctx)
-                    }
-                    else {
-                        self.view_input_password(ctx)
-                    }
-                }
+            if !self.password_needed || self.session_code.is_none() {
+                self.view_input_code(ctx)
+            }
             else {
-                html! {
-                    <div class="d-flex justify-content-center align-items-center mt-2">
-                        <h2 class="text-muted">{"Loading.."}</h2>
-                    </div>
-                }
+                self.view_input_password(ctx)
             }
         }
     }
@@ -208,22 +210,6 @@ impl Client {
             .borrow()
             .send_message(&serde_json::to_string(&file_request).unwrap());
         true
-    }
-
-    fn ws_connect(ctx: &Context<Self>) -> Option<WsConnection> {
-        let callback = ctx.link().callback(Msg::CallbackWebsocket);
-        WsConnection::new("ws://localhost:9000", callback).ok()
-    }
-
-    fn ws_disconnect(&mut self) {
-        self.web_socket = None;
-    }
-
-    fn ws_send(&mut self, data: SessionDetails) {
-        self.web_socket
-            .as_mut()
-            .unwrap()
-            .send_text(&serde_json::to_string(&data).unwrap());
     }
 
     fn update_web_rtc(&mut self, ctx: &Context<Self>, msg: WebRtcMessage) -> bool {
@@ -280,24 +266,33 @@ impl Client {
                 self.files.clear();
                 self.fetchin_file = None;
                 self.web_rtc_state = ConnectionState::new();
-                self.ws_disconnect();
+                self.session_details = None;
+                self.session_code = None;
+                self.password_needed = false;
             }
         }
         true
     }
 
-    fn update_web_socket(&mut self, _: &Context<Self>, msg: WebSocketMessage) -> bool {
+    fn update_api(&mut self, _: &Context<Self>, msg: ApiServiceMessage) -> bool {
         match msg {
-            WebSocketMessage::Text(data) => {
-                if self.web_rtc_state.ice_connection_state.is_some() &&
-                    self.web_rtc_state.ice_connection_state.unwrap() == web_sys::RtcIceConnectionState::Connected {
+            ApiServiceMessage::SessionJoin(result) => {
+                if result.is_err() {
+                    let status = result.unwrap_err();
+                    console::log_1(&format!("Error joining session: {:?}", status).into());
                     return false;
                 }
+                let result = result.unwrap();
+                self.session_details = Some(result);
 
-                let session_check: Result<SessionCheck, serde_json::Error> = serde_json::from_str(&data);
-                if session_check.is_ok() {
-                    match session_check.unwrap().result {
-                        SessionCheckResult::Success(session_host) => {
+                /*#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SessionJoinResult {
+    pub compression_level: u8,
+    pub has_password: bool,
+    pub connection_details: String,
+}
+ */
+                /*SessionCheckResult::Success(session_host) => {
                             self.password_needed = false;
                             self.session_details.password = String::new();
                             self.compression_level = session_host.compression;
@@ -326,22 +321,11 @@ impl Client {
                             self.password_needed = false;
                             self.session_details.code = String::new();
                             self.ws_disconnect();
-                        }
-                    }
-                }
-            }
-            WebSocketMessage::Open => {
-                let data = SessionDetails::SessionClient(SessionClient::SessionFetchOffer(self.session_details.clone()));
-                self.ws_send(data);
-            }
-            WebSocketMessage::Close => {
-                self.ws_disconnect();
-            }
-            WebSocketMessage::Err => {
-                self.ws_disconnect();
-            }
+                        } */
+                true
+            },
+            _ => false,
         }
-        true
     }
 
     fn view_input_code(&self, ctx: &Context<Self>) -> Html {

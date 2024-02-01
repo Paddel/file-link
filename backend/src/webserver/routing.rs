@@ -1,14 +1,16 @@
 use once_cell::sync::Lazy;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::RwLock;
 
 use rocket::fs::NamedFile;
 // use rocket::response::status::NotFound;
 use rocket::http::Status;
 use crate::shared::SessionCreate;
-use rocket::{get, post};
+use rocket::{get, post, State};
 
-use super::webserver::Webserver;
+use super::session_manager::SessionManager;
+use super::webserver::webserver::unescape_quotes;
 
 const INDEX_FILE_PATH: &str = "./public/index.html";
 static INDEX_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(INDEX_FILE_PATH));
@@ -29,14 +31,15 @@ pub async fn catch_all(path: PathBuf) -> Option<NamedFile> {
 }
 
 #[post("/api/sessions", data = "<data>")]
-pub async fn create_session(data: String) -> Result<String, Status> {
-    let data = Webserver::unescape_quotes(&data);
+pub async fn create_session(session_manager: &State<RwLock<SessionManager>>, data: String) -> Result<String, Status> {
+    let data = unescape_quotes(&data);
     let session_create = serde_json::from_str::<SessionCreate>(&data);
     let session_create = match session_create {
         Ok(session_create) => session_create,
         Err(_) => return Err(Status::BadRequest),
     };
-    
-    println!("Session create: {:?}", session_create);
-    Ok(data)
+
+    let result = session_manager.write().unwrap().create_session(session_create);
+    let result = serde_json::to_string(&result).unwrap();
+    Ok(result)
 }
