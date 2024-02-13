@@ -1,4 +1,4 @@
- use crate::shared::SessionCreate;
+ use crate::shared::HostCreate;
 
 pub struct Session {
     pub compression_level: u8,
@@ -7,7 +7,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn from(session_create: SessionCreate) -> Self {
+    pub fn from(session_create: HostCreate) -> Self {
         Self {
             compression_level: session_create.compression_level,
             password: session_create.password,

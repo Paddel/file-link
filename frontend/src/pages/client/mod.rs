@@ -15,7 +15,7 @@ use crate::services::api_service::{api_service, ApiServiceMessage};
 use crate::services::web_rtc::{WebRTCManager, WebRtcMessage, State, ConnectionState};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
 use crate::wrtc_protocol::{FilesUpdate, FileRequest};
-use crate::shared::SessionJoinResult;
+use crate::shared::ClientJoinResult;
 
 mod download_manager;
 
@@ -34,7 +34,6 @@ pub enum Msg {
 
     CallbackWebRtc(WebRtcMessage),
     CallbackApi(ApiServiceMessage),
-    CallbackWebsocket(WebSocketMessage),
 }
 
 #[derive(Properties, PartialEq)]
@@ -48,7 +47,7 @@ pub struct Client {
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     web_rtc_state: ConnectionState,
     files: HashMap<Uuid, FileItem>,
-    session_details: Option<SessionJoinResult>,
+    session_details: Option<ClientJoinResult>,
     session_code: Option<String>,
     password_needed: bool,
     fetchin_file: Option<FileTag>,
@@ -120,9 +119,6 @@ impl Component for Client {
             }
             Msg::CallbackApi(msg) => {
                 self.update_api(ctx, msg)
-            }
-            Msg::CallbackWebsocket(msg) => {
-                self.update_web_socket(ctx, msg)
             }
         }
     }
@@ -276,7 +272,7 @@ impl Client {
 
     fn update_api(&mut self, _: &Context<Self>, msg: ApiServiceMessage) -> bool {
         match msg {
-            ApiServiceMessage::SessionJoin(result) => {
+            ApiServiceMessage::ClientJoin(result) => {
                 if result.is_err() {
                     let status = result.unwrap_err();
                     console::log_1(&format!("Error joining session: {:?}", status).into());
@@ -286,7 +282,7 @@ impl Client {
                 self.session_details = Some(result);
 
                 /*#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct SessionJoinResult {
+pub struct ClientJoinResult {
     pub compression_level: u8,
     pub has_password: bool,
     pub connection_details: String,
@@ -412,14 +408,14 @@ pub struct SessionJoinResult {
             if let Some(state) = connection_state.ice_gathering_state {
                 if state == web_sys::RtcIceGatheringState::Complete {
                     let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
-                    let data = SessionDetails::SessionClient(SessionClient::SessionAnswer(SessionAnswer{
-                        code: self.session_details.code.clone(),
-                        password: self.session_details.password.clone(),
-                        answer,
-                    }));
+                    // let data = SessionDetails::SessionClient(SessionClient::SessionAnswer(SessionAnswer{
+                    //     code: self.session_details.code.clone(),
+                    //     password: self.session_details.password.clone(),
+                    //     answer,
+                    // }));
                     
-                    self.ws_send(data);
-                    self.ws_disconnect();
+                    // self.ws_send(data);
+                    // self.ws_disconnect();
                 }
             }
         }

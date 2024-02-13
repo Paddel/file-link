@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use rocket::fs::NamedFile;
 // use rocket::response::status::NotFound;
 use rocket::http::Status;
-use crate::shared::SessionCreate;
+use crate::shared::HostCreate;
 use rocket::{get, post, State};
 
 use super::session_manager::SessionManager;
@@ -33,7 +33,7 @@ pub async fn catch_all(path: PathBuf) -> Option<NamedFile> {
 #[post("/api/sessions", data = "<data>")]
 pub async fn create_session(session_manager: &State<RwLock<SessionManager>>, data: String) -> Result<String, Status> {
     let data = unescape_quotes(&data);
-    let session_create = serde_json::from_str::<SessionCreate>(&data);
+    let session_create = serde_json::from_str::<HostCreate>(&data);
     let session_create = match session_create {
         Ok(session_create) => session_create,
         Err(_) => return Err(Status::BadRequest),

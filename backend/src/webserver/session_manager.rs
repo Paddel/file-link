@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::session::Session;
-use crate::shared::{SessionCreate, SessionCreateResult, SessionJoin, SessionJoinResult};
+use crate::shared::{HostCreate, HostCreateResult, ClientJoin, ClientJoinResult};
 
 use rand::Rng;
 
@@ -16,19 +16,19 @@ impl SessionManager {
         }
     }
 
-    pub fn create_session(&mut self, session_create: SessionCreate) -> SessionCreateResult {
+    pub fn create_session(&mut self, session_create: HostCreate) -> HostCreateResult {
         let code = self.generate_code();
         let session = Session::from(session_create);
         self.sessions.insert(code.clone(), session);
-        SessionCreateResult { code }
+        HostCreateResult { code }
     }
 
-    pub fn join_session(&self, session_join: SessionJoin) -> Option<SessionJoinResult> {
+    pub fn join_session(&self, session_join: ClientJoin) -> Option<ClientJoinResult> {
         let session = self.sessions.get(&session_join.code)?;
         if session.password != session_join.password {
             return None;
         }
-        Some(SessionJoinResult {
+        Some(ClientJoinResult {
             compression_level: session.compression_level,
             has_password: session.has_password(),
             connection_details: session.connection_details.clone(),
