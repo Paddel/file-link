@@ -33,7 +33,7 @@ pub mod api_service {
                 callback.emit(ApiServiceMessage::HostCreate(Err(status)));
                 return;
             }
-            
+
             let response = response.unwrap();
             let response = serde_json::from_str::<HostCreateResult>(&response);
             if response.is_err() {
@@ -44,7 +44,12 @@ pub mod api_service {
             callback.emit(ApiServiceMessage::HostCreate(Ok(response)));
         };
 
-        execute_api_call(callback_result, request);
+        if request.is_err() {
+            console::log_1(&JsValue::from_str(&format!("Error: {:?}", request.err())));
+            return;
+        }
+
+        execute_api_call(callback_result, request.unwrap());
     }
 
     pub fn join_session(callback: Callback<ApiServiceMessage>, code: &str, password: Option<String>) {
@@ -62,7 +67,7 @@ pub mod api_service {
                 callback.emit(ApiServiceMessage::ClientJoin(Err(status)));
                 return;
             }
-            
+
             let response = response.unwrap();
             let response = serde_json::from_str::<ClientJoinResult>(&response);
             if response.is_err() {
@@ -73,31 +78,28 @@ pub mod api_service {
             callback.emit(ApiServiceMessage::ClientJoin(Ok(response)));
         };
 
-        execute_api_call(callback_result, request);
-    }
-
-    fn execute_api_call(callback: impl FnOnce(Result<String, u16>) + 'static, request: Result<Request, gloo::net::Error>) {
         if request.is_err() {
             console::log_1(&JsValue::from_str(&format!("Error: {:?}", request.err())));
-            return
+            return;
         }
 
-        let request = request.unwrap();
+        execute_api_call(callback_result, request.unwrap())
+    }
+
+    fn execute_api_call(callback: impl FnOnce(Result<String, u16>) + 'static, request: Request) {
         wasm_bindgen_futures::spawn_local(async move {
             // let result = request.mode(RequestMode::NoCors).send().await;
             let response = request.send().await;
 
             if response.is_err() {
                 let status = response.as_ref().unwrap().status();
-                console::log_1(&JsValue::from_str(&format!("Status: {}", status)));
                 return callback(Err(status));
             }
             let response = response.unwrap().text().await;
             if response.is_err() {
-                console::log_1(&JsValue::from_str(&format!("Error: {:?}", response.err())));
                 return callback(Err(500));
             }
-            callback(Ok(response.unwrap())); 
+            callback(Ok(response.unwrap()));
         });
     }
 
