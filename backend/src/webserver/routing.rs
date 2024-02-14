@@ -30,6 +30,22 @@ pub async fn catch_all(path: PathBuf) -> Option<NamedFile> {
     NamedFile::open(&path).await.ok()
 }
 
+#[get("/api/sessions/poll/<session_id>")]
+pub async fn poll_session(session_manager: &State<RwLock<SessionManager>>, session_id: String) -> Result<String, Status> {
+    print!("Polling session: {}", session_id);
+    // let data = unescape_quotes(&data);
+    // let session_create = serde_json::from_str::<HostCreate>(&data);
+    // let session_create = match session_create {
+    //     Ok(session_create) => session_create,
+    //     Err(_) => return Err(Status::BadRequest),
+    // };
+
+    // let result = session_manager.write().unwrap().create_session(session_create);
+    // let result = serde_json::to_string(&result).unwrap();
+    // Ok(result)
+    Err(Status::BadRequest)
+}
+
 #[post("/api/sessions", data = "<data>")]
 pub async fn create_session(session_manager: &State<RwLock<SessionManager>>, data: String) -> Result<String, Status> {
     let data = unescape_quotes(&data);

@@ -161,10 +161,10 @@ impl Component for Host {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         if self.web_rtc_connected() {
-            self.view_session_create(ctx)
+            self.view_session_handle(ctx)
         }
         else {
-            self.view_session_handle(ctx)
+            self.view_session_create(ctx)
         }
     }
 }
@@ -202,7 +202,7 @@ impl Host {
     }
 
     fn web_rtc_connected(&self) -> bool {
-        !matches!(self.web_rtc_state.ice_connection_state, Some(web_sys::RtcIceConnectionState::Connected))
+        matches!(self.web_rtc_state.ice_connection_state, Some(web_sys::RtcIceConnectionState::Connected))
     }
     
     fn web_rtc_send_file(&mut self, ctx: &Context<Self>, uuid: Uuid) {
@@ -337,6 +337,9 @@ impl Host {
                 }
                 let result = result.unwrap();
                 self.code = result.code;
+
+                api_service::poll_session(_ctx.link().callback(Msg::CallbackApi), self.code.clone());
+
                 true
             },
             _ => false,

@@ -11,11 +11,6 @@ pub struct HostCreateResult {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct HostPoll {
-    pub code: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct HostPollResult {
     pub connection_details: String,
 }

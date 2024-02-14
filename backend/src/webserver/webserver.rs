@@ -18,7 +18,7 @@ pub mod webserver {
         rt.block_on(async {
             rocket::custom(config)
                 .manage(RwLock::new(SessionManager::new()))
-                .mount("/", routes![root, create_session, catch_all])
+                .mount("/", routes![root, create_session, poll_session, catch_all])
                 .launch()
                 .await
                 .unwrap();
