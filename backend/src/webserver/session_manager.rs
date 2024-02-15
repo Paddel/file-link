@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 
 use super::session::Session;
 use crate::shared::{HostCreate, HostCreateResult, ClientJoin, ClientJoinResult};
@@ -16,9 +16,9 @@ impl SessionManager {
         }
     }
 
-    pub fn create_session(&mut self, session_create: HostCreate) -> HostCreateResult {
+    pub fn create_session(&mut self, session_create: HostCreate, address: SocketAddr) -> HostCreateResult {
         let code = self.generate_code();
-        let session = Session::from(session_create);
+        let session = Session::from(session_create, address);
         self.sessions.insert(code.clone(), session);
         HostCreateResult { code }
     }
@@ -31,8 +31,12 @@ impl SessionManager {
         Some(ClientJoinResult {
             compression_level: session.compression_level,
             has_password: session.has_password(),
-            connection_details: session.connection_details.clone(),
+            connection_details: session.connection_details_host.clone(),
         })
+    }
+
+    pub fn get_session(&self, code: &str) -> Option<&Session> {
+        self.sessions.get(code)
     }
 
     fn generate_code(&self) -> String {

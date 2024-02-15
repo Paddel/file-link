@@ -1,17 +1,25 @@
- use crate::shared::HostCreate;
+ use std::{net::SocketAddr, sync::Condvar};
+
+use crate::shared::HostCreate;
 
 pub struct Session {
     pub compression_level: u8,
     pub password: String,
-    pub connection_details: String,
+    pub connection_details_host: String,
+    pub address: SocketAddr,
+    pub connection_details_join: Option<String>,
+    pub join_cond: Condvar,
 }
 
 impl Session {
-    pub fn from(session_create: HostCreate) -> Self {
+    pub fn from(session_create: HostCreate, address: SocketAddr) -> Self {
         Self {
             compression_level: session_create.compression_level,
             password: session_create.password,
-            connection_details: session_create.connection_details,
+            connection_details_host: session_create.connection_details,
+            address,
+            connection_details_join: None,
+            join_cond: Condvar::new(),
         }
     }
 
