@@ -8,13 +8,14 @@ use yew::Callback;
 
 use crate::constants::{HOST_ADDRESS, PORT};
 use crate::shared::{
-    ClientGetDetails, ClientGetDetailsResult, HostCreate, HostCreateResult, HostPollResult,
+    ClientGetDetails, ClientGetDetailsResult, ClientJoin, ClientJoinResult, HostCreate, HostCreateResult, HostPollResult,
 };
 
 pub enum ApiServiceMessage {
     HostCreate(Result<HostCreateResult, u16>),
     HostPoll(Result<HostPollResult, u16>),
-    ClientJoin(Result<ClientGetDetailsResult, u16>),
+    ClientDetails(Result<ClientGetDetailsResult, u16>),
+    ClientJoin(Result<ClientJoinResult, u16>),
 }
 
 pub mod api_service {
@@ -114,6 +115,49 @@ pub mod api_service {
             password: password.unwrap_or("".to_string()),
         };
         let session_join_str = serde_json::to_string(&session_join).expect("Serialization failed");
+        let url = get_host_address() + "/api/sessions/details";
+        let request = Request::post(&url).json(&session_join_str);
+
+        let callback_result = move |response: Result<String, u16>| {
+            if response.is_err() {
+                let status = response.unwrap_err();
+                callback.emit(ApiServiceMessage::ClientDetails(Err(status)));
+                return;
+            }
+
+            let response = response.unwrap();
+            let response = serde_json::from_str::<ClientGetDetailsResult>(&response);
+            if response.is_err() {
+                console::log_1(&JsValue::from_str(&format!(
+                    "Error joining session: {:?}",
+                    response.err()
+                )));
+                return;
+            }
+            let response = response.unwrap();
+            callback.emit(ApiServiceMessage::ClientDetails(Ok(response)));
+        };
+
+        if request.is_err() {
+            console::log_1(&JsValue::from_str(&format!("Error: {:?}", request.err())));
+            return;
+        }
+
+        execute_api_call(callback_result, request.unwrap())
+    }
+
+    pub fn join_session(
+        callback: Callback<ApiServiceMessage>,
+        code: String,
+        password: String,
+        connection_details: String,
+    ) {
+        let session_join = ClientJoin {
+            code,
+            password,
+            connection_details,
+        };
+        let session_join_str = serde_json::to_string(&session_join).expect("Serialization failed");
         let url = get_host_address() + "/api/sessions/join";
         let request = Request::post(&url).json(&session_join_str);
 
@@ -125,7 +169,7 @@ pub mod api_service {
             }
 
             let response = response.unwrap();
-            let response = serde_json::from_str::<ClientGetDetailsResult>(&response);
+            let response = serde_json::from_str::<ClientJoinResult>(&response);
             if response.is_err() {
                 console::log_1(&JsValue::from_str(&format!(
                     "Error joining session: {:?}",

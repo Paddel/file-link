@@ -272,7 +272,7 @@ impl Client {
 
     fn update_api(&mut self, _: &Context<Self>, msg: ApiServiceMessage) -> bool {
         match msg {
-            ApiServiceMessage::ClientJoin(result) => {
+            ApiServiceMessage::ClientDetails(result) => {
                 if result.is_err() {
                     let status = result.unwrap_err();
                     console::log_1(&format!("Error joining session: {:?}", status).into());
