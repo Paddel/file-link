@@ -1,4 +1,4 @@
- use std::{net::SocketAddr, sync::Condvar};
+ use std::{net::SocketAddr, sync::{Condvar, Mutex}};
 
 use crate::shared::HostCreate;
 
@@ -7,7 +7,7 @@ pub struct Session {
     pub password: String,
     pub connection_details_host: String,
     pub address: SocketAddr,
-    pub connection_details_join: Option<String>,
+    pub connection_details_join: Mutex<Option<String>>,
     pub join_cond: Condvar,
 }
 
@@ -18,7 +18,7 @@ impl Session {
             password: session_create.password,
             connection_details_host: session_create.connection_details,
             address,
-            connection_details_join: None,
+            connection_details_join: Mutex::new(None),
             join_cond: Condvar::new(),
         }
     }

@@ -4,9 +4,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use rocket::fs::NamedFile;
-// use rocket::response::status::NotFound;
 use crate::shared::HostCreate;
-use crate::webserver::session::Session;
 use rocket::http::Status;
 use rocket::{get, post, State};
 
@@ -51,11 +49,23 @@ pub async fn poll_session(
     }
     let session = session.unwrap();
 
-    if session.address == address {
+    if session.address != address {
         return Err(Status::Forbidden);
     }
 
-    Err(Status::BadRequest)
+    let connection_details = &*session
+        .join_cond
+        .wait_while(session.connection_details_join.lock().unwrap(), |details| {
+            details.is_none()
+        }).unwrap();
+
+    if connection_details.is_none() {
+        return Err(Status::NotFound);
+    }
+
+    print!("Connection details: {}", connection_details.clone().unwrap());
+    
+    Ok(connection_details.clone().unwrap())
 }
 
 #[post("/api/sessions", data = "<data>")]
