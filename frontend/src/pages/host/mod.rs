@@ -16,7 +16,6 @@ use crate::file_tag::{FileState, FileTag, convert_bytes_to_readable_format};
 use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
 use crate::shared::FRONTEND_CONFIG;
-use crate::shared::{HostCreateResult, ClientJoinResult};
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
 use crate::services::web_socket::{WsConnection, WebSocketMessage};
 use crate::services::api_service::{api_service, ApiServiceMessage};

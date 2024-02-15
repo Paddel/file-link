@@ -104,7 +104,7 @@ impl Component for Client {
                 };
                 
                 let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
-                api_service::join_session(callback, session_code, password);
+                api_service::get_session_details(callback, session_code, password);
                 true
             }
             Msg::FileAccept(tag) => {
@@ -279,7 +279,24 @@ impl Client {
                     return false;
                 }
                 let result = result.unwrap();
-                self.session_details = Some(result);
+                let details = result.connection_details;
+                // self.session_details = Some(result);
+                self.web_rtc_manager.deref().borrow_mut().set_state(State::Client(ConnectionState::new()));
+                let result: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
+                if result.is_ok() {
+                    let result = WebRTCManager::validate_offer(&self.web_rtc_manager, &details);
+                    if result.is_err() {
+                        web_sys::Window::alert_with_message(
+                            &web_sys::window().unwrap(),
+                            &format!(
+                                "Cannot use offer. Failure reason: {:?}",
+                                result.err().unwrap()
+                            ),
+                        )
+                        .expect("Error creating alert");
+                    }
+                }
+                
 
                 /*#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ClientJoinResult {
@@ -408,14 +425,8 @@ pub struct ClientJoinResult {
             if let Some(state) = connection_state.ice_gathering_state {
                 if state == web_sys::RtcIceGatheringState::Complete {
                     let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
-                    // let data = SessionDetails::SessionClient(SessionClient::SessionAnswer(SessionAnswer{
-                    //     code: self.session_details.code.clone(),
-                    //     password: self.session_details.password.clone(),
-                    //     answer,
-                    // }));
-                    
-                    // self.ws_send(data);
-                    // self.ws_disconnect();
+                    console::log_1(&format!("Answer: {:?}", answer).into());
+
                 }
             }
         }

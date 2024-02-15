@@ -8,13 +8,13 @@ use yew::Callback;
 
 use crate::constants::{HOST_ADDRESS, PORT};
 use crate::shared::{
-    ClientJoin, ClientJoinResult, HostCreate, HostCreateResult, HostPollResult,
+    ClientGetDetails, ClientGetDetailsResult, HostCreate, HostCreateResult, HostPollResult,
 };
 
 pub enum ApiServiceMessage {
     HostCreate(Result<HostCreateResult, u16>),
     HostPoll(Result<HostPollResult, u16>),
-    ClientJoin(Result<ClientJoinResult, u16>),
+    ClientJoin(Result<ClientGetDetailsResult, u16>),
 }
 
 pub mod api_service {
@@ -104,12 +104,12 @@ pub mod api_service {
         execute_api_call(callback_result, request.unwrap())
     }
 
-    pub fn join_session(
+    pub fn get_session_details(
         callback: Callback<ApiServiceMessage>,
         code: &str,
         password: Option<String>,
     ) {
-        let session_join = ClientJoin {
+        let session_join = ClientGetDetails {
             code: code.to_string(),
             password: password.unwrap_or("".to_string()),
         };
@@ -125,7 +125,7 @@ pub mod api_service {
             }
 
             let response = response.unwrap();
-            let response = serde_json::from_str::<ClientJoinResult>(&response);
+            let response = serde_json::from_str::<ClientGetDetailsResult>(&response);
             if response.is_err() {
                 console::log_1(&JsValue::from_str(&format!(
                     "Error joining session: {:?}",

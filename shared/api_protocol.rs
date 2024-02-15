@@ -16,19 +16,26 @@ pub struct HostPollResult {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ClientGetDetails {
+    pub code: String,
+    pub password: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ClientGetDetailsResult {
+    pub connection_details: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ClientJoin {
     pub code: String,
     pub password: String,
+    pub connection_details: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ClientJoinResult {
     pub compression_level: u8,
     pub has_password: bool,
-    pub connection_details: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ClientJoinDetails {
     pub connection_details: String,
 }
