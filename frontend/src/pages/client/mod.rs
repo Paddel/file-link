@@ -296,45 +296,6 @@ impl Client {
                         .expect("Error creating alert");
                     }
                 }
-                
-
-                /*#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ClientJoinResult {
-    pub compression_level: u8,
-    pub has_password: bool,
-    pub connection_details: String,
-}
- */
-                /*SessionCheckResult::Success(session_host) => {
-                            self.password_needed = false;
-                            self.session_details.password = String::new();
-                            self.compression_level = session_host.compression;
-
-                            self.web_rtc_manager.deref().borrow_mut().set_state(State::Client(ConnectionState::new()));
-                            let result: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
-                            if result.is_ok() {
-                                let result = WebRTCManager::validate_offer(&self.web_rtc_manager, &session_host.offer);
-                                if result.is_err() {
-                                    web_sys::Window::alert_with_message(
-                                        &web_sys::window().unwrap(),
-                                        &format!(
-                                            "Cannot use offer. Failure reason: {:?}",
-                                            result.err().unwrap()
-                                        ),
-                                    )
-                                    .expect("alert should work");
-                                }
-                            }
-                        }
-                        SessionCheckResult::WrongPassword => {
-                            self.password_needed = true;
-                            self.ws_disconnect();
-                        }
-                        SessionCheckResult::NotFound => {
-                            self.password_needed = false;
-                            self.session_details.code = String::new();
-                            self.ws_disconnect();
-                        } */
                 true
             },
             _ => false,
