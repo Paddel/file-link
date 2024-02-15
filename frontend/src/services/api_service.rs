@@ -102,7 +102,7 @@ pub mod api_service {
             return;
         }
 
-        execute_api_call(callback_result, request.unwrap())
+        execute_api_call(callback_result, request.unwrap());
     }
 
     pub fn get_session_details(
@@ -143,7 +143,7 @@ pub mod api_service {
             return;
         }
 
-        execute_api_call(callback_result, request.unwrap())
+        execute_api_call(callback_result, request.unwrap());
     }
 
     pub fn join_session(
@@ -186,7 +186,7 @@ pub mod api_service {
             return;
         }
 
-        execute_api_call(callback_result, request.unwrap())
+        execute_api_call(callback_result, request.unwrap());
     }
 
     fn execute_api_call(callback: impl FnOnce(Result<String, u16>) + 'static, request: Request) {
