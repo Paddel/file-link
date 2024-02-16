@@ -1,7 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use super::session::{Session, CondvarDetails};
-use crate::shared::{HostCreate, HostCreateResult, ClientJoin, ClientJoinResult};
+use crate::shared::{HostCreate, HostCreateResult, ClientGetDetailsResult, ClientJoin, ClientJoinResult};
 
 use rand::Rng;
 
@@ -29,6 +29,16 @@ impl SessionManager {
             return None;
         }
         Some(session.condvar_details.clone())
+    }
+
+    pub fn get_connection_details(&self, code: &str, password: &str) -> Option<ClientGetDetailsResult> {
+        let session = self.sessions.get(code)?;
+        if session.password != password {
+            return None;
+        }
+        
+        let result = ClientGetDetailsResult { connection_details: session.connection_details_host.clone() };
+        Some(result)
     }
 
     pub fn join_session(&self, session_join: ClientJoin) -> Option<ClientJoinResult> {

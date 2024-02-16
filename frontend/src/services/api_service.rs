@@ -143,7 +143,6 @@ pub mod api_service {
             return;
         }
 
-        console::log_1(&JsValue::from_str(&format!("Request")));
         execute_api_call(callback_result, request.unwrap());
     }
 
@@ -192,16 +191,15 @@ pub mod api_service {
 
     fn execute_api_call(callback: impl FnOnce(Result<String, u16>) + 'static, request: Request) {
         wasm_bindgen_futures::spawn_local(async move {
-            // let result = request.mode(RequestMode::NoCors).send().await;
             let response = request.send().await;
+
             
             if response.is_err() {
-                console::log_1(&JsValue::from_str(&format!("Error: {:?}", response.err())));
                 return callback(Err(500));
             }
             
             let response = response.unwrap();
-
+            
             if response.status() != 200 {
                 let status = response.status();
                 return callback(Err(status));

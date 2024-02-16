@@ -286,17 +286,12 @@ impl Client {
                 if result.is_ok() {
                     let result = WebRTCManager::validate_offer(&self.web_rtc_manager, &details);
                     if result.is_err() {
-                        web_sys::Window::alert_with_message(
-                            &web_sys::window().unwrap(),
-                            &format!(
-                                "Cannot use offer. Failure reason: {:?}",
-                                result.err().unwrap()
-                            ),
-                        )
-                        .expect("Error creating alert");
+                        console::log_1(&format!("Error validating offer: {:?}", result.clone().err()).into());
                     }
+
+                    console::log_1(&format!("Offer: {:?}", result).into());
                 }
-                true
+                false
             },
             _ => false,
         }

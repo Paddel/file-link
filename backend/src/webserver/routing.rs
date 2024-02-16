@@ -87,3 +87,27 @@ pub async fn create_session(
     let result = serde_json::to_string(&result).unwrap();
     Ok(result)
 }
+
+#[post("/api/sessions/details", data = "<data>")]
+pub fn get_session_details(session_manager: &State<RwLock<SessionManager>>, data: String) -> Result<String, Status> {
+    let data = unescape_quotes(&data);
+    let session_join = serde_json::from_str::<ClientGetDetails>(&data);
+    let session_join = match session_join {
+        Ok(session_join) => session_join,
+        Err(_) => return Err(Status::BadRequest),
+    };
+
+    let session_manager = session_manager.read();
+    if session_manager.is_err() {
+        return Err(Status::InternalServerError);
+    }
+    let session_manager = session_manager.unwrap();
+
+    let result = session_manager.get_connection_details(&session_join.code, &session_join.password);
+    let result = match result {
+        Some(result) => result,
+        None => return Err(Status::NotFound),
+    };
+    let result = serde_json::to_string(&result).unwrap();
+    Ok(result)
+}
