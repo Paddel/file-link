@@ -9,7 +9,7 @@ use std::sync::{RwLock};
 use std::time::Duration;
 
 use rocket::fs::NamedFile;
-use crate::shared::HostCreate;
+use crate::shared::{ClientGetDetails, HostCreate};
 use rocket::http::Status;
 use rocket::{get, post, State};
 
