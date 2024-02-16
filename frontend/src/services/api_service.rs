@@ -1,9 +1,5 @@
-use std::collections::HashMap;
-
-use gloo::net::http::{Request, RequestBuilder};
-use gloo::timers::callback::Timeout;
+use gloo::net::http::Request;
 use wasm_bindgen::JsValue;
-use web_sys::{console, RequestMode};
 use yew::Callback;
 
 use crate::constants::{HOST_ADDRESS, PORT};
@@ -19,6 +15,8 @@ pub enum ApiServiceMessage {
 }
 
 pub mod api_service {
+    use web_sys::console;
+
     use super::*;
 
     pub fn create_session(

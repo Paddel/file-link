@@ -13,7 +13,6 @@ use download_manager::DownloadManager;
 use crate::file_tag::{FileTag, FileState, convert_bytes_to_readable_format};
 use crate::services::api_service::{api_service, ApiServiceMessage};
 use crate::services::web_rtc::{WebRTCManager, WebRtcMessage, State, ConnectionState};
-use crate::services::web_socket::{WsConnection, WebSocketMessage};
 use crate::wrtc_protocol::{FilesUpdate, FileRequest};
 use crate::shared::ClientJoinResult;
 
