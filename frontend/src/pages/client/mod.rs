@@ -384,9 +384,7 @@ impl Client {
                         return;
                     }
                     let session_code = self.session_code.clone().unwrap();
-
                     let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
-                    console::log_1(&format!("Answer: {:?}", answer).into());
                     
                     let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
                     api_service::join_session(callback, session_code, self.password.clone(), answer);

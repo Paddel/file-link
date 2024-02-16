@@ -46,6 +46,9 @@ impl SessionManager {
         if session.password != session_join.password {
             return None;
         }
+        
+        session.condvar_details.0.notify_all();
+
         Some(ClientJoinResult {
             compression_level: session.compression_level,
             has_password: session.has_password(),
