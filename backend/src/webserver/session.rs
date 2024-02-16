@@ -1,14 +1,18 @@
- use std::{net::SocketAddr, sync::{Condvar, Mutex}};
+use std::{net::SocketAddr, sync::Arc};
+
+use async_condvar_fair::Condvar;
+use tokio::sync::Mutex;
 
 use crate::shared::HostCreate;
+
+pub type CondvarDetails = (Condvar, Mutex<Option<String>>);
 
 pub struct Session {
     pub compression_level: u8,
     pub password: String,
     pub connection_details_host: String,
     pub address: SocketAddr,
-    pub connection_details_join: Mutex<Option<String>>,
-    pub join_cond: Condvar,
+    pub condvar_details: Arc<CondvarDetails>,
 }
 
 impl Session {
@@ -18,8 +22,7 @@ impl Session {
             password: session_create.password,
             connection_details_host: session_create.connection_details,
             address,
-            connection_details_join: Mutex::new(None),
-            join_cond: Condvar::new(),
+            condvar_details: Arc::new((Condvar::new(), Mutex::new(None))),
         }
     }
 

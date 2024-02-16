@@ -49,6 +49,7 @@ pub struct Client {
     files: HashMap<Uuid, FileItem>,
     session_details: Option<ClientJoinResult>,
     session_code: Option<String>,
+    password: Option<String>,
     password_needed: bool,
     fetchin_file: Option<FileTag>,
     input_code: NodeRef,
@@ -76,6 +77,7 @@ impl Component for Client {
             files: HashMap::new(),
             session_details: None,
             session_code: code,
+            password: None,
             password_needed: false,
             input_code: NodeRef::default(),
             input_password: NodeRef::default(),
@@ -97,14 +99,12 @@ impl Component for Client {
                 };
 
                 //get password if available (option)
-                let password = if self.input_password.cast::<HtmlInputElement>().is_some() {
-                    Some(self.input_password.cast::<HtmlInputElement>().unwrap().value())
-                } else {
-                    None
-                };
+                self.password = self.input_password.cast::<HtmlInputElement>().map(|input| input.value());
                 
+
+                console::log_1(&format!("Session code: {:?}", session_code).into());
                 let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
-                api_service::get_session_details(callback, session_code, password);
+                api_service::get_session_details(callback, session_code, self.password.clone());
                 true
             }
             Msg::FileAccept(tag) => {
@@ -252,7 +252,7 @@ impl Client {
             }
             WebRtcMessage::UpdateState(state) => {
                 if let State::Client(connection_state) = state.clone() {
-                    self.on_state_update(&connection_state);
+                    self.on_state_update(ctx, &connection_state);
                     self.web_rtc_state = connection_state;
                 };
             }
@@ -280,7 +280,7 @@ impl Client {
                 }
                 let result = result.unwrap();
                 let details = result.connection_details;
-                // self.session_details = Some(result);
+
                 self.web_rtc_manager.deref().borrow_mut().set_state(State::Client(ConnectionState::new()));
                 let result: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
                 if result.is_ok() {
@@ -380,14 +380,22 @@ impl Client {
         }
     }
 
-    fn on_state_update(&mut self, connection_state: &ConnectionState) {
+    fn on_state_update(&mut self, ctx: &Context<Self>, connection_state: &ConnectionState) {
         // console::log_1(&format!("UpdateState {:?}", connection_state).into());
         if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
             if let Some(state) = connection_state.ice_gathering_state {
                 if state == web_sys::RtcIceGatheringState::Complete {
+                    if self.session_code.is_none() {
+                        console::log_1(&"Session code is not set".into());
+                        return;
+                    }
+                    let session_code = self.session_code.clone().unwrap();
+
                     let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
                     console::log_1(&format!("Answer: {:?}", answer).into());
-
+                    
+                    let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
+                    api_service::join_session(callback, session_code, self.password.clone(), answer);
                 }
             }
         }

@@ -1,7 +1,12 @@
+use async_condvar_fair::Condvar;
 use once_cell::sync::Lazy;
+use tokio::sync::Mutex;
+use tokio::time::sleep;
+use std::collections::VecDeque;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{RwLock};
+use std::time::Duration;
 
 use rocket::fs::NamedFile;
 use crate::shared::HostCreate;
@@ -37,35 +42,26 @@ pub async fn poll_session(
     session_id: String,
 ) -> Result<String, Status> {
     print!("Polling session: {}", session_id);
-    let session_manager = session_manager.write();
-    if session_manager.is_err() {
-        return Err(Status::InternalServerError);
-    }
-    let session_manager = session_manager.unwrap();
 
-    let session = session_manager.get_session(&session_id);
-    if session.is_none() {
-        return Err(Status::NotFound);
-    }
-    let session = session.unwrap();
+    let condvar_details = {
+        let session_manager = session_manager.read();
+        if session_manager.is_err() {
+            return Err(Status::InternalServerError);
+        }
+        let session_manager = session_manager.unwrap();
+        let condvar_details = session_manager.get_condvar_details(&address, &session_id);
+        if condvar_details.is_none() {
+            return Err(Status::NotFound);
+        }
+        condvar_details.unwrap()
+    };
 
-    if session.address != address {
-        return Err(Status::Forbidden);
-    }
+    let lock = condvar_details.1.lock().await;
+    condvar_details.0.wait_no_relock((lock, &condvar_details.1)).await;
 
-    let connection_details = &*session
-        .join_cond
-        .wait_while(session.connection_details_join.lock().unwrap(), |details| {
-            details.is_none()
-        }).unwrap();
+    print!("Session polled: {}", session_id);
 
-    if connection_details.is_none() {
-        return Err(Status::NotFound);
-    }
-
-    print!("Connection details: {}", connection_details.clone().unwrap());
-    
-    Ok(connection_details.clone().unwrap())
+    Ok("".to_string())
 }
 
 #[post("/api/sessions", data = "<data>")]

@@ -143,18 +143,19 @@ pub mod api_service {
             return;
         }
 
+        console::log_1(&JsValue::from_str(&format!("Request")));
         execute_api_call(callback_result, request.unwrap());
     }
 
     pub fn join_session(
         callback: Callback<ApiServiceMessage>,
         code: String,
-        password: String,
+        password: Option<String>,
         connection_details: String,
     ) {
         let session_join = ClientJoin {
             code,
-            password,
+            password: password.unwrap_or("".to_string()),
             connection_details,
         };
         let session_join_str = serde_json::to_string(&session_join).expect("Serialization failed");
