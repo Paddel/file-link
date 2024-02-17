@@ -101,8 +101,6 @@ impl Component for Host {
                 
                 if let Some(state) = self.web_rtc_state.ice_gathering_state {
                     if state == web_sys::RtcIceGatheringState::Complete {
-
-                        console::log_1(&JsValue::from_str(&"ws_connect"));
                         self.create_session(ctx);
                         return true;
                     }
