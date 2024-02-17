@@ -33,10 +33,6 @@ pub mod api_service {
         let session_create_str =
             serde_json::to_string(&session_create).expect("Serialization failed");
         let url = get_host_address() + "/api/sessions";
-        console::log_1(&JsValue::from_str(&format!(
-            "session_create_str: {}",
-            session_create_str
-        )));
         let request = Request::post(&url).json(&session_create_str);
 
         let callback_result = move |response: Result<String, u16>| {

@@ -278,13 +278,12 @@ impl Host {
                         if let Some(state) = connection_state.ice_connection_state {
                             if state == web_sys::RtcIceConnectionState::Connected ||
                             state == web_sys::RtcIceConnectionState::Disconnected {
-                                console::log_1(&format!("UpdateState update").into());
+
                                 update = true;
                             }
                         }
                     }
                     
-                    console::log_1(&format!("UpdateState done").into());
                     self.web_rtc_state = connection_state;
                 };
                 update
