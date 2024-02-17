@@ -74,9 +74,10 @@ pub mod api_service {
         let callback_result = move |response: Result<String, u16>| {
             if response.is_err() {
                 let status = response.unwrap_err();
-                // callback.emit(ApiServiceMessage::ClientJoin(Err(status)));
-                console::log_1(&JsValue::from_str(&format!("Error polling session: {:?}", status)));
-                poll_session(callback, code);
+                //retry on timeout
+                if status == 502 || status == 408 {
+                    poll_session(callback, code);
+                }
                 return;
             }
 
