@@ -145,12 +145,9 @@ pub async fn join_session(
         };
         (condvar_details, join_result)
     };
-
-    println!("Joining session: {}", session_join.code);
     
     *condvar_details.1.lock().await = Some(session_join.connection_details.clone());
     condvar_details.0.notify_all();
-    println!("Joining session2: {}", session_join.code);
     let result = serde_json::to_string(&join_result).unwrap();
     Ok(result)
 }
