@@ -114,7 +114,6 @@ pub fn get_session_details(session_manager: &State<RwLock<SessionManager>>, data
 
 #[post("/api/sessions/join", data = "<data>")]
 pub async fn join_session(
-    address: SocketAddr,
     session_manager: &State<RwLock<SessionManager>>,
     data: String,
 ) -> Result<String, Status> {
