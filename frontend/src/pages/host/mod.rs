@@ -17,7 +17,6 @@ use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
 use crate::shared::FRONTEND_CONFIG;
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
-use crate::services::web_socket::{WsConnection, WebSocketMessage};
 use crate::services::api_service::{api_service, ApiServiceMessage};
 
 mod drop_files;
@@ -45,13 +44,11 @@ pub enum Msg {
 
     CallbackWebRtc(WebRtcMessage),
     CallbackApi(ApiServiceMessage),
-    CallbackWebsocket(WebSocketMessage),
 }
 
 pub struct Host {
     web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     web_rtc_state: ConnectionState,
-    web_socket: Option<WsConnection>,
     files: HashMap<Uuid, FileItem>,
     origin: String,
     code: String,
@@ -77,7 +74,6 @@ impl Component for Host {
         Host {
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
             web_rtc_state: ConnectionState::new(),
-            web_socket: None,
             files: HashMap::new(),
             origin,
             code: String::new(),
@@ -109,7 +105,7 @@ impl Component for Host {
                     if state == web_sys::RtcIceGatheringState::Complete {
 
                         console::log_1(&JsValue::from_str(&"ws_connect"));
-                        self.ws_connect(ctx);
+                        self.create_session(ctx);
                         return true;
                     }
                 }
@@ -142,9 +138,6 @@ impl Component for Host {
             Msg::CallbackApi(msg) => {
                 self.update_api_service(ctx, msg)
             }
-            Msg::CallbackWebsocket(msg) => {
-                self.update_web_socket(ctx, msg)
-            }
             Msg::CopyShareLink => {
                 if let Some(input) = self.node_share.cast::<web_sys::HtmlInputElement>() {
                     input.select();
@@ -169,6 +162,12 @@ impl Component for Host {
 }
 
 impl Host {
+    fn create_session(&self, ctx: &Context<Self>) {
+        let callback = ctx.link().callback(Msg::CallbackApi);
+        let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
+        api_service::create_session(callback, answer, self.password.clone(), self.compression_level);
+    }
+
     fn handle_files(&mut self, files: Vec<File>) {
         files.into_iter().for_each(|file| {
             let item = FileItem {
@@ -250,23 +249,6 @@ impl Host {
         });
     }
 
-    fn ws_connect(&mut self, ctx: &Context<Self>) {
-        let callback = ctx.link().callback(Msg::CallbackWebsocket);
-        let frontend_config = &*FRONTEND_CONFIG;
-        self.web_socket = WsConnection::new(&frontend_config.websocket_address, callback).ok();
-    }
-
-    fn ws_disconnect(&mut self) {
-        self.web_socket = None;
-    }
-
-    fn ws_send(&mut self, data: SessionDetails) {
-        self.web_socket
-            .as_mut()
-            .unwrap()
-            .send_text(&serde_json::to_string(&data).unwrap());
-    }
-
     fn update_web_rtc(&mut self, ctx: &Context<Self>, msg: WebRtcMessage) -> bool {
         match msg {
             WebRtcMessage::Message(data) => {
@@ -283,18 +265,12 @@ impl Host {
                 false
             }
             WebRtcMessage::UpdateState(state) => {
-                console::log_1(&format!("UpdateState").into());
                 let mut update = false;
                 if let State::Server(connection_state) = state.clone() {
-                    // console::log_1(&format!("UpdateState {:?}", connection_state).into());
                     if connection_state.ice_gathering_state != self.web_rtc_state.ice_gathering_state {
                         if let Some(state) = connection_state.ice_gathering_state {
                             if state == web_sys::RtcIceGatheringState::Complete {
-                                console::log_1(&format!("UpdateState connect").into());
-                                // self.ws_connect(ctx);
-                                let callback = ctx.link().callback(Msg::CallbackApi);
-                                let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
-                                api_service::create_session(callback, answer, self.password.clone(), self.compression_level);
+                                self.create_session(ctx);
                             }
                         }
                         update = true
@@ -318,7 +294,6 @@ impl Host {
             WebRtcMessage::Reset => {
                 self.web_rtc_manager = WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc));
                 self.web_rtc_state = ConnectionState::new();
-                self.web_socket = None;
                 self.files = HashMap::new();
                 self.code = String::new();
                 self.compression_level = COMPRESSION_DEFAULT;
@@ -346,58 +321,10 @@ impl Host {
                 }
                 let result = result.unwrap();
                 
-                let result_validate = WebRTCManager::validate_answer(&self.web_rtc_manager, &result.connection_details);
-                if result_validate.is_ok() {
-                    self.ws_disconnect();
-                }
+                let _ = WebRTCManager::validate_answer(&self.web_rtc_manager, &result.connection_details);
                 true
             },
             _ => false,
-        }
-    }
-
-    fn update_web_socket(&mut self, _: &Context<Self>, msg: WebSocketMessage) -> bool {
-        match msg {
-            WebSocketMessage::Text(data) => {
-                let mut update = false;
-                let session_host_result: Result<SessionHostResult, serde_json::Error> = serde_json::from_str(&data);
-
-                if let Ok(session_host_result) = session_host_result {
-                    match session_host_result {
-                        SessionHostResult::SessionCode(session_code) => {
-                            self.code = session_code.code;
-                            update = true;
-                        }
-                        SessionHostResult::SessionAnswerForward(session_answer_forward) => {
-                            let answer = session_answer_forward.answer;
-                            let result = WebRTCManager::validate_answer(&self.web_rtc_manager, &answer);
-                            if result.is_ok() {
-                                self.ws_disconnect();
-                            }
-                        }
-                    }
-                }
-                update
-            }
-            WebSocketMessage::Open => {
-                let offer = self.web_rtc_manager.deref().borrow_mut().create_encoded_offer();
-                let data = SessionDetails::SessionHost(SessionHost{
-                    offer,
-                    password: self.password.clone(),
-                    compression: self.compression_level as u8,
-                });
-
-                self.ws_send(data);
-                false
-            }
-            WebSocketMessage::Close => {
-                self.ws_disconnect();
-                false
-            }
-            WebSocketMessage::Err => {
-                self.ws_disconnect();
-                false
-            }
         }
     }
 
