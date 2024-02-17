@@ -274,7 +274,7 @@ impl Client {
             ApiServiceMessage::ClientDetails(result) => {
                 if result.is_err() {
                     let status = result.unwrap_err();
-                    console::log_1(&format!("Error joining session: {:?}", status).into());
+                    console::log_1(&format!("Error getting detail session: {:?}", status).into());
                     return false;
                 }
                 let result = result.unwrap();
@@ -292,6 +292,16 @@ impl Client {
                 }
                 false
             },
+            ApiServiceMessage::ClientJoin(result) => {
+                if result.is_err() {
+                    let status = result.unwrap_err();
+                    console::log_1(&format!("Error joining session: {:?}", status).into());
+                    return false;
+                }
+                let result = result.unwrap();
+                self.session_details = Some(result);
+                true
+            }
             _ => false,
         }
     }

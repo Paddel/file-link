@@ -338,7 +338,18 @@ impl Host {
                 self.code = result.code;
 
                 api_service::poll_session(_ctx.link().callback(Msg::CallbackApi), self.code.clone());
-
+                true
+            },
+            ApiServiceMessage::HostPoll(result) => {
+                if result.is_err() {
+                    return false;
+                }
+                let result = result.unwrap();
+                
+                let result_validate = WebRTCManager::validate_answer(&self.web_rtc_manager, &result.connection_details);
+                if result_validate.is_ok() {
+                    self.ws_disconnect();
+                }
                 true
             },
             _ => false,
