@@ -23,11 +23,17 @@ impl SessionManager {
         HostCreateResult { code }
     }
 
-    pub fn get_condvar_details(&self, address: &SocketAddr, code: &str) -> Option<Arc<CondvarDetails>> {
-        let session = self.sessions.get(code)?;
-        if session.address != *address {
-            return None;
+    pub fn is_session_owner(&self, address: &SocketAddr, code: &str) -> bool {
+        let session = self.sessions.get(code);
+        if session.is_none() {
+            return false;
         }
+        let session = session.unwrap();
+        session.address == *address
+    }
+
+    pub fn get_condvar_details(&self, code: &str) -> Option<Arc<CondvarDetails>> {
+        let session = self.sessions.get(code)?;
         Some(session.condvar_details.clone())
     }
 
@@ -39,21 +45,6 @@ impl SessionManager {
         
         let result = ClientGetDetailsResult { connection_details: session.connection_details_host.clone() };
         Some(result)
-    }
-
-    pub fn join_session(&self, session_join: ClientJoin) -> Option<ClientJoinResult> {
-        let session = self.sessions.get(&session_join.code)?;
-        if session.password != session_join.password {
-            return None;
-        }
-        
-        session.condvar_details.0.notify_all();
-
-        Some(ClientJoinResult {
-            compression_level: session.compression_level,
-            has_password: session.has_password(),
-            connection_details: session.connection_details_host.clone(),
-        })
     }
 
     pub fn get_session(&self, code: &str) -> Option<&Session> {

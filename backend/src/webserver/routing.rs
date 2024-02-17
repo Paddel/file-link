@@ -1,10 +1,10 @@
 use once_cell::sync::Lazy;
-use std::fs;
+use std::{fs, result};
 use std::path::PathBuf;
 use std::sync::RwLock;
 
 use rocket::fs::NamedFile;
-use crate::shared::{ClientGetDetails, HostCreate, ClientJoin};
+use crate::shared::{HostPollResult, ClientGetDetails, HostCreate, ClientJoin, ClientJoinResult};
 use rocket::http::Status;
 use rocket::{get, post, State};
 
@@ -44,7 +44,11 @@ pub async fn poll_session(
             return Err(Status::InternalServerError);
         }
         let session_manager = session_manager.unwrap();
-        let condvar_details = session_manager.get_condvar_details(&address, &session_id);
+        if !session_manager.is_session_owner(&address, &session_id) {
+            return Err(Status::Forbidden);
+        }
+
+        let condvar_details = session_manager.get_condvar_details(&session_id);
         if condvar_details.is_none() {
             return Err(Status::NotFound);
         }
@@ -52,11 +56,12 @@ pub async fn poll_session(
     };
 
     let lock = condvar_details.1.lock().await;
-    condvar_details.0.wait_no_relock((lock, &condvar_details.1)).await;
-
-    print!("Session polled: {}", session_id);
-
-    Ok("".to_string())
+    let _ = condvar_details.0.wait((lock, &condvar_details.1)).await;
+    let lock = condvar_details.1.lock().await;
+    let connection_details = lock.clone().expect("Details not set by client").clone();
+    let result = HostPollResult { connection_details };
+    let result = serde_json::to_string(&result).unwrap();
+    Ok(result)
 }
 
 #[post("/api/sessions", data = "<data>")]
@@ -108,7 +113,11 @@ pub fn get_session_details(session_manager: &State<RwLock<SessionManager>>, data
 }
 
 #[post("/api/sessions/join", data = "<data>")]
-pub fn join_session(session_manager: &State<RwLock<SessionManager>>, data: String) -> Result<String, Status> {
+pub async fn join_session(
+    address: SocketAddr,
+    session_manager: &State<RwLock<SessionManager>>,
+    data: String,
+) -> Result<String, Status> {
     let data = unescape_quotes(&data);
     let session_join = serde_json::from_str::<ClientJoin>(&data);
     let session_join = match session_join {
@@ -116,17 +125,33 @@ pub fn join_session(session_manager: &State<RwLock<SessionManager>>, data: Strin
         Err(_) => return Err(Status::BadRequest),
     };
 
-    let session_manager = session_manager.read();
-    if session_manager.is_err() {
-        return Err(Status::InternalServerError);
-    }
-    let session_manager = session_manager.unwrap();
+    let (condvar_details, join_result) = {
+        let session_manager = session_manager.read();
+        if session_manager.is_err() {
+            return Err(Status::InternalServerError);
+        }
+        let session_manager = session_manager.unwrap();
 
-    let result = session_manager.join_session(session_join);
-    let result = match result {
-        Some(result) => result,
-        None => return Err(Status::NotFound),
+        let session = session_manager.get_session(&session_join.code);
+        if session.is_none() {
+            return Err(Status::NotFound);
+        }
+        let session = session.unwrap();
+
+        let condvar_details = session.condvar_details.clone();
+        let join_result = ClientJoinResult {
+            compression_level: session.compression_level,
+            has_password: session.has_password(),
+            connection_details: session.connection_details_host.clone(),
+        };
+        (condvar_details, join_result)
     };
-    let result = serde_json::to_string(&result).unwrap();
+
+    println!("Joining session: {}", session_join.code);
+    
+    *condvar_details.1.lock().await = Some(session_join.connection_details.clone());
+    condvar_details.0.notify_all();
+    println!("Joining session2: {}", session_join.code);
+    let result = serde_json::to_string(&join_result).unwrap();
     Ok(result)
 }
