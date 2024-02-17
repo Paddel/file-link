@@ -13,7 +13,6 @@ mod constants;
 pub mod shared {
     use serde::{Deserialize, Serialize};
     use toml;
-    include!("../../shared/ws_protocol.rs");
     include!("../../shared/api_protocol.rs");
     include!("../../shared/config.rs");
 }

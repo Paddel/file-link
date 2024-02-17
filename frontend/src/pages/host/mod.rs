@@ -22,8 +22,6 @@ use crate::services::api_service::{api_service, ApiServiceMessage};
 mod drop_files;
 mod slider;
 
-include!("../../../../shared/ws_protocol.rs");
-
 const COMPRESSION_DEFAULT: u8 = 9;
 
 #[derive(Clone)]

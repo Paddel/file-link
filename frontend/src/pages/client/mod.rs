@@ -18,8 +18,6 @@ use crate::shared::ClientJoinResult;
 
 mod download_manager;
 
-include!("../../../../shared/ws_protocol.rs");
-
 pub struct FileItem {
     state: FileState,
     tag: FileTag,

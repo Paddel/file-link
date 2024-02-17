@@ -29,7 +29,6 @@ pub struct BackendConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct FrontendConfig {
-    pub websocket_address: String,
     pub api_address: String,
 }
 
