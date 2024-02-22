@@ -7,6 +7,8 @@ use crate::shared::{
     ClientGetDetails, ClientGetDetailsResult, ClientJoin, ClientJoinResult, HostCreate, HostCreateResult, HostPollResult,
 };
 
+const POLL_WAIT_TIME_ONE_TIMOUT: u64 = 1000;
+
 pub enum ApiServiceMessage {
     HostCreate(Result<HostCreateResult, u16>),
     HostPoll(Result<HostPollResult, u16>),
@@ -15,6 +17,7 @@ pub enum ApiServiceMessage {
 }
 
 pub mod api_service {
+    use std::time::Duration;
     use web_sys::console;
 
     use super::*;
@@ -65,19 +68,12 @@ pub mod api_service {
 
     pub fn poll_session(callback: Callback<ApiServiceMessage>, code: String) {
         let url = get_host_address() + "/api/sessions/poll/" + &code;
-        let request = Request::get(&url).build();
 
         let callback_result = move |response: Result<String, u16>| {
             if response.is_err() {
-                let status = response.unwrap_err();
-                //retry on timeout
-                if status == 502 || status == 408 {
-                    poll_session(callback, code);
-                }
+                console::log_1(&JsValue::from_str(&format!("Error: {:?}", response.err())));
                 return;
             }
-
-            console::log_1(&JsValue::from_str(&format!("Polling response: {:?}", response)));
 
             let response = response.unwrap();
             let response: Result<_, serde_json::Error> = serde_json::from_str::<HostPollResult>(&response);
@@ -92,12 +88,8 @@ pub mod api_service {
             callback.emit(ApiServiceMessage::HostPoll(Ok(response)));
         };
 
-        if request.is_err() {
-            console::log_1(&JsValue::from_str(&format!("Error: {:?}", request.err())));
-            return;
-        }
-
-        execute_api_call(callback_result, request.unwrap());
+        let request_builder = move |url: &str| Request::get(url).build().expect("Request build failed");
+        execute_api_poll(callback_result, url, request_builder);
     }
 
     pub fn get_session_details(
@@ -187,13 +179,41 @@ pub mod api_service {
     fn execute_api_call(callback: impl FnOnce(Result<String, u16>) + 'static, request: Request) {
         wasm_bindgen_futures::spawn_local(async move {
             let response = request.send().await;
-
             
             if response.is_err() {
                 return callback(Err(500));
             }
             
             let response = response.unwrap();
+            
+            if response.status() != 200 {
+                let status = response.status();
+                return callback(Err(status));
+            }
+            let response = response.text().await;
+            if response.is_err() {
+                return callback(Err(500));
+            }
+            callback(Ok(response.unwrap()));
+        });
+    }
+
+    fn execute_api_poll(callback: impl FnOnce(Result<String, u16>) + Clone + 'static, url: String, request_builder: impl FnOnce(&str) -> Request + std::marker::Copy + 'static) {
+        wasm_bindgen_futures::spawn_local(async move {
+            let request = request_builder(&url);
+            let response = request.send().await;
+            
+            if response.is_err() {
+                return callback(Err(500));
+            }
+            
+            let response = response.unwrap();
+
+            if response.status() == 502 || response.status() == 408 {
+                async_std::task::sleep(Duration::from_millis(POLL_WAIT_TIME_ONE_TIMOUT)).await;
+                execute_api_poll(callback.clone(), url, request_builder);
+                return;
+            }
             
             if response.status() != 200 {
                 let status = response.status();

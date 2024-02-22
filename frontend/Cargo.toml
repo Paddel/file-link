@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1"
+async-std = "1.12.0"
 base64 = "0.21.2"
 gloo = { version = "0.10.0", optional = false }
 js-sys = "0.3.64"
