@@ -1,7 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use super::session::{Session, CondvarDetails};
-use crate::shared::{HostCreate, HostCreateResult, ClientGetDetailsResult, ClientJoin, ClientJoinResult};
+use crate::shared::{HostCreate, HostCreateResult, ClientGetDetailsResult};
 
 use rand::Rng;
 

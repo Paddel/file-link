@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use std::{fs, result};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
 

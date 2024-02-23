@@ -3,9 +3,8 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::JsCast;
 use web_sys::{console, File, HtmlInputElement};
 use yew::platform::spawn_local;
 use yew::{Html, html, Context, Component, NodeRef};
@@ -15,7 +14,6 @@ use drop_files::DropFiles;
 use crate::file_tag::{FileState, FileTag, convert_bytes_to_readable_format};
 use crate::pages::host::slider::Slider;
 use crate::wrtc_protocol::{FilesUpdate, FileInfo, FileRequest};
-use crate::shared::FRONTEND_CONFIG;
 use crate::services::web_rtc::{State, ConnectionState, WebRtcMessage, WebRTCManager};
 use crate::services::api_service::{api_service, ApiServiceMessage};
 

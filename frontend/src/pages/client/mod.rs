@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web_sys::{HtmlInputElement, console};
 use yew::prelude::*;
