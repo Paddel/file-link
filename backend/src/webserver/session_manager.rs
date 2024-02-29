@@ -37,6 +37,10 @@ impl SessionManager {
         Some(session.condvar_details.clone())
     }
 
+    pub fn is_session_code_valid(&self, code: &str) -> bool {
+        self.sessions.contains_key(code)
+    }
+
     pub fn get_connection_details(&self, code: &str, password: &str) -> Option<ClientGetDetailsResult> {
         let session = self.sessions.get(code)?;
         if session.password != password {

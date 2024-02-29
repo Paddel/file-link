@@ -103,10 +103,14 @@ pub fn get_session_details(session_manager: &State<RwLock<SessionManager>>, data
     }
     let session_manager = session_manager.unwrap();
 
+    if !session_manager.is_session_code_valid(&session_join.code) {
+        return Err(Status::NotFound);
+    }
+
     let result = session_manager.get_connection_details(&session_join.code, &session_join.password);
     let result = match result {
         Some(result) => result,
-        None => return Err(Status::NotFound),
+        None => return Err(Status::Unauthorized),
     };
     let result = serde_json::to_string(&result).unwrap();
     Ok(result)
@@ -136,6 +140,10 @@ pub async fn join_session(
             return Err(Status::NotFound);
         }
         let session = session.unwrap();
+
+        if session.password != session_join.password {
+            return Err(Status::Unauthorized);
+        }
 
         let condvar_details = session.condvar_details.clone();
         let join_result = ClientJoinResult {
