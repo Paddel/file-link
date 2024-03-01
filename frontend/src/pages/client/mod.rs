@@ -4,18 +4,22 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use uuid::Uuid;
-use web_sys::{HtmlInputElement, console};
+use web_sys::console;
 use yew::prelude::*;
 
 use download_manager::DownloadManager;
 
-use crate::file_tag::{FileTag, FileState, convert_bytes_to_readable_format};
+use crate::file_tag::{convert_bytes_to_readable_format, FileState, FileTag};
+use crate::pages::client::connect::Connect;
+use crate::pages::client::password::Password;
 use crate::services::api_service::{api_service, ApiServiceMessage};
-use crate::services::web_rtc::{WebRTCManager, WebRtcMessage, State, ConnectionState};
-use crate::wrtc_protocol::{FilesUpdate, FileRequest};
+use crate::services::web_rtc::{ConnectionState, State, WebRTCManager, WebRtcMessage};
 use crate::shared::ClientJoinResult;
+use crate::wrtc_protocol::{FileRequest, FilesUpdate};
 
+mod connect;
 mod download_manager;
+mod password;
 
 pub struct FileItem {
     state: FileState,
@@ -24,7 +28,7 @@ pub struct FileItem {
 }
 
 pub enum Msg {
-    SessionConnect,
+    SessionConnect(String, Option<String>),
     FileAccept(FileTag),
     FileDownload(FileTag),
 
@@ -48,8 +52,6 @@ pub struct Client {
     password: Option<String>,
     password_needed: bool,
     fetchin_file: Option<FileTag>,
-    input_code: NodeRef,
-    input_password: NodeRef,
 }
 
 impl Component for Client {
@@ -65,7 +67,7 @@ impl Component for Client {
         } else {
             None
         };
-        
+
         Self {
             download_manager: DownloadManager::new(),
             web_rtc_manager: WebRTCManager::new(ctx.link().callback(Msg::CallbackWebRtc)),
@@ -75,47 +77,27 @@ impl Component for Client {
             session_code: code,
             password: None,
             password_needed: false,
-            input_code: NodeRef::default(),
-            input_password: NodeRef::default(),
             fetchin_file: None,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::SessionConnect => {
-                if self.input_code.cast::<HtmlInputElement>().is_some() {
-                    let link = self.input_code.cast::<HtmlInputElement>().unwrap().value();
-                    self.session_code = Self::extract_code_from_link(&link).map(|code| code.to_string());
-                }
-
-                let session_code = match &self.session_code {
-                    Some(code) => code,
-                    None => return false,
-                };
-
-                //get password if available (option)
-                self.password = self.input_password.cast::<HtmlInputElement>().map(|input| input.value());
-                
-
-                console::log_1(&format!("Session code: {:?}", session_code).into());
+            Msg::SessionConnect(code, password) => {
+                console::log_1(&format!("Session code: {:?}", code).into());
                 let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
-                api_service::get_session_details(callback, session_code, self.password.clone());
+                api_service::get_session_details(callback, &code, password.clone());
+                self.session_code = Some(code);
+                self.password = password;
                 true
             }
-            Msg::FileAccept(tag) => {
-                self.handle_file_accept(tag)
-            }
+            Msg::FileAccept(tag) => self.handle_file_accept(tag),
             Msg::FileDownload(tag) => {
                 self.download_manager.download(tag);
                 true
             }
-            Msg::CallbackWebRtc(msg) => {
-                self.update_web_rtc(ctx, msg)
-            }
-            Msg::CallbackApi(msg) => {
-                self.update_api(ctx, msg)
-            }
+            Msg::CallbackWebRtc(msg) => self.update_web_rtc(ctx, msg),
+            Msg::CallbackApi(msg) => self.update_api(ctx, msg),
         }
     }
 
@@ -169,10 +151,14 @@ impl Component for Client {
             }
         } else {
             if !self.password_needed || self.session_code.is_none() {
-                self.view_input_code(ctx)
-            }
-            else {
-                self.view_input_password(ctx)
+                html! {
+                    <Connect on_connect={ctx.link().callback(|code: String| Msg::SessionConnect(code.clone(), None))} />
+                }
+            } else {
+                let session_code = self.session_code.clone().expect("Session code is not set");
+                html! {
+                    <Password on_connect={ctx.link().callback(move |password: String| Msg::SessionConnect(session_code.clone(), Some(password.clone())))} />
+                }
             }
         }
     }
@@ -196,7 +182,9 @@ impl Client {
         file_item.state = FileState::Transferring;
         self.fetchin_file = Some(file_tag.clone());
 
-        let file_request = FileRequest {uuid: file_tag.uuid()};
+        let file_request = FileRequest {
+            uuid: file_tag.uuid(),
+        };
         self.web_rtc_manager
             .deref()
             .borrow()
@@ -215,9 +203,11 @@ impl Client {
             }
             WebRtcMessage::Data(data, size) => {
                 let result = self.download_manager.save_chunk(&data, size);
-                
+
                 if result.is_err() {
-                    console::log_1(&format!("Error saving chunk: {:?}", result.clone().err().unwrap()).into());
+                    console::log_1(
+                        &format!("Error saving chunk: {:?}", result.clone().err().unwrap()).into(),
+                    );
                     return false;
                 }
 
@@ -227,7 +217,6 @@ impl Client {
                     Some(file) => file,
                     None => return false,
                 };
-                
 
                 if result.unwrap() {
                     file.state = FileState::Done;
@@ -238,11 +227,10 @@ impl Client {
                             break;
                         }
                     }
-                }
-                else {
+                } else {
                     file.state = FileState::Transferring;
                     file.progress = self.download_manager.get_progress();
-                    return true
+                    return true;
                 }
                 return true;
             }
@@ -271,24 +259,36 @@ impl Client {
             ApiServiceMessage::ClientDetails(result) => {
                 if result.is_err() {
                     let status = result.unwrap_err();
-                    console::log_1(&format!("Error getting detail session: {:?}", status).into());
-                    return false;
+                    if status == 401 {//Unauthorized
+                        self.password_needed = true;
+                        return true;
+                    }
+                    else {
+                        console::log_1(&format!("Error getting detail session: {:?}", status).into());
+                        return false;
+                    }
                 }
                 let result = result.unwrap();
                 let details = result.connection_details;
 
-                self.web_rtc_manager.deref().borrow_mut().set_state(State::Client(ConnectionState::new()));
-                let result: Result<(), wasm_bindgen::JsValue> = WebRTCManager::start_web_rtc(&self.web_rtc_manager);
+                self.web_rtc_manager
+                    .deref()
+                    .borrow_mut()
+                    .set_state(State::Client(ConnectionState::new()));
+                let result: Result<(), wasm_bindgen::JsValue> =
+                    WebRTCManager::start_web_rtc(&self.web_rtc_manager);
                 if result.is_ok() {
                     let result = WebRTCManager::validate_offer(&self.web_rtc_manager, &details);
                     if result.is_err() {
-                        console::log_1(&format!("Error validating offer: {:?}", result.clone().err()).into());
+                        console::log_1(
+                            &format!("Error validating offer: {:?}", result.clone().err()).into(),
+                        );
                     }
 
                     console::log_1(&format!("Offer: {:?}", result).into());
                 }
                 false
-            },
+            }
             ApiServiceMessage::ClientJoin(result) => {
                 if result.is_err() {
                     let status = result.unwrap_err();
@@ -300,42 +300,6 @@ impl Client {
                 true
             }
             _ => false,
-        }
-    }
-
-    fn view_input_code(&self, ctx: &Context<Self>) -> Html {
-        html! {
-            <div class="container mt-5">
-                <div class="row justify-content-center">
-                    <div class="col-md-6">
-                    <h2 class="text-center mb-4">{"Enter the initiator's link"}</h2>
-                        <div class="input-group">
-                            <input type="text" ref={self.input_code.clone()} class="form-control" placeholder="Enter Session Link" />
-                            <div class="input-group-append">
-                                <button onclick={ctx.link().callback(|_| Msg::SessionConnect)} class="btn btn-outline-secondary" type="button">{"Connect"}</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-    }
-
-    fn view_input_password(&self, ctx: &Context<Self>) -> Html {
-        html! {
-            <div class="container mt-5">
-                <div class="row justify-content-center">
-                    <div class="col-md-6">
-                        <h2 class="text-center mb-4">{"Wrong password"}</h2>
-                        <div class="input-group">
-                            <input type="text" ref={self.input_password.clone()} class="form-control" placeholder="Enter Password" />
-                            <div class="input-group-append">
-                                <button onclick={ctx.link().callback(|_| Msg::SessionConnect)} class="btn btn-outline-secondary" type="button">{"Connect"}</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         }
     }
 
@@ -392,9 +356,15 @@ impl Client {
                     }
                     let session_code = self.session_code.clone().unwrap();
                     let answer = self.web_rtc_manager.deref().borrow().create_encoded_offer();
-                    
-                    let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
-                    api_service::join_session(callback, session_code, self.password.clone(), answer);
+
+                    let callback: Callback<ApiServiceMessage> =
+                        ctx.link().callback(Msg::CallbackApi);
+                    api_service::join_session(
+                        callback,
+                        session_code,
+                        self.password.clone(),
+                        answer,
+                    );
                 }
             }
         }
@@ -404,24 +374,22 @@ impl Client {
         self.files.clear();
         for file in files_update.files {
             let file_tag = FileTag::new(file.name, file.size, file.uuid);
-            self.files.insert(file_tag.uuid(), FileItem {
-                state: FileState::Pending,
-                tag: file_tag,
-                progress: 0.0,
-            });
+            self.files.insert(
+                file_tag.uuid(),
+                FileItem {
+                    state: FileState::Pending,
+                    tag: file_tag,
+                    progress: 0.0,
+                },
+            );
         }
         true
     }
 
     fn web_rtc_connected(&self) -> bool {
-        matches!(self.web_rtc_state.ice_connection_state, Some(web_sys::RtcIceConnectionState::Connected))
-    }
-
-    fn extract_code_from_link(link: &str) -> Option<&str> {
-        if link.contains("/receive/") {
-            let parts: Vec<&str> = link.split('/').collect();
-            return parts.last().cloned();
-        }
-        None
+        matches!(
+            self.web_rtc_state.ice_connection_state,
+            Some(web_sys::RtcIceConnectionState::Connected)
+        )
     }
 }
