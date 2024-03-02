@@ -194,7 +194,8 @@ impl DownloadManager {
             let on_success: Closure<dyn FnMut(web_sys::Event)> = Closure::wrap(Box::new(move |event| {
                 let result = Self::transfer_to_download(&js_blob_parts.borrow_mut(), event);
                 if let Err(err) = result {
-                    console::log_1(&format!("Error downloading file: {:?}", err).into());
+                    // console::log_1(&format!("Error downloading file: {:?}", err).into());
+                    return;
                 }
                 
                 if counter == chunks - 1 {
@@ -226,7 +227,7 @@ impl DownloadManager {
         let cursor: Result<web_sys::IdbCursorWithValue, JsValue> = event.target().unwrap().dyn_into::<web_sys::IdbRequest>()?.result()?.dyn_into::<web_sys::IdbCursorWithValue>();
         
         if cursor.is_err() {
-            return Ok(());
+            return Err(JsValue::from_str("No cursor"));
         }
 
         let cursor = cursor.unwrap();
