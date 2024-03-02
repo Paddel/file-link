@@ -90,7 +90,6 @@ impl Component for Client {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::SessionConnect(code, password) => {
-                console::log_1(&format!("Session code: {:?}", code).into());
                 let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
                 api_service::get_session_details(callback, &code, password.clone());
                 self.session_code = Some(code);
@@ -110,7 +109,6 @@ impl Component for Client {
     fn view(&self, ctx: &Context<Self>) -> Html {
         match self.current_state() {
             ClientState::Connect => {
-                console::log_1(&"Connect".into());
                 html! { <Connect on_connect={ctx.link().callback(|code: String| Msg::SessionConnect(code.clone(), None))} /> }
             }
             ClientState::Password => {
@@ -244,8 +242,6 @@ impl Client {
                             &format!("Error validating offer: {:?}", result.clone().err()).into(),
                         );
                     }
-
-                    console::log_1(&format!("Offer: {:?}", result).into());
                 }
                 false
             }
