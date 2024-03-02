@@ -10,10 +10,9 @@ or download zlib for an already cloned repository with:
 `git submodule update --init --recursive`
 
 Install and add the following to your system's PATH environment variable:
-- Clang > 16.0.0
-- openssl > OpenSSL 1.1
-- rollup > 3.28.0
-- wasm-pack > 0.12.1
+- [Clang](https://github.com/llvm/llvm-project/releases) > 16.0.0
+- [rollup](https://rollupjs.org/) > 3.28.0
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) > 0.12.1
 
 ### Build/Run:
 To build and run file-link execute `cargo run` in the root directory of the project.
