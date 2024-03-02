@@ -21,10 +21,8 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct BackendConfig {
-    pub ws_bind_addr: String,
-    pub ws_port: i32,
-    // pub web_bind_addr: String,
-    // pub web_port: u16,
+    pub web_bind_addr: String,
+    pub web_port: u16,
 }
 
 #[derive(Debug, Deserialize)]
