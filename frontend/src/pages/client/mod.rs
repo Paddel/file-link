@@ -380,17 +380,18 @@ impl Client {
     }
 
     fn on_files_updates(&mut self, files_update: FilesUpdate) -> bool {
-        self.files.clear();
         for file in files_update.files {
             let file_tag = FileTag::new(file.name, file.size, file.uuid);
-            self.files.insert(
-                file_tag.uuid(),
-                FileItem {
-                    state: FileState::Pending,
-                    tag: file_tag,
-                    progress: 0.0,
-                },
-            );
+            if !self.files.contains_key(&file_tag.uuid()) {
+                self.files.insert(
+                    file_tag.uuid(),
+                    FileItem {
+                        state: FileState::Pending,
+                        tag: file_tag,
+                        progress: 0.0,
+                    },
+                );
+            }
         }
         true
     }
