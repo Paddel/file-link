@@ -376,7 +376,8 @@ impl Client {
     }
 
     fn on_files_updates(&mut self, files_update: FilesUpdate) -> bool {
-        for file in files_update.files {
+        // Add new files
+        for file in files_update.clone().files {
             let file_tag = FileTag::new(file.name, file.size, file.uuid);
             if !self.files.contains_key(&file_tag.uuid()) {
                 self.files.insert(
@@ -388,6 +389,18 @@ impl Client {
                     },
                 );
             }
+        }
+        
+        // Remove deleted files
+        let file_uuids: Vec<Uuid> = files_update.files.iter().map(|file| file.uuid).collect();
+        let files_to_remove: Vec<Uuid> = self
+            .files
+            .keys()
+            .filter(|uuid| !file_uuids.contains(uuid))
+            .cloned()
+            .collect();
+        for uuid in files_to_remove {
+            self.files.remove(&uuid);
         }
         true
     }
