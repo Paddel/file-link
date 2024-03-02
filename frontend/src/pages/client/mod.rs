@@ -27,6 +27,12 @@ pub struct FileItem {
     progress: f64,
 }
 
+pub enum ClientState {
+    Connect,
+    Password,
+    Connected,
+}
+
 pub enum Msg {
     SessionConnect(String, Option<String>),
     FileAccept(FileTag),
@@ -102,64 +108,16 @@ impl Component for Client {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if self.web_rtc_connected() && self.session_details.is_some() {
-            let session_details = self.session_details.as_ref().unwrap();
-            let section_table = {
-                html! {
-                    <div class="table-wrapper table-responsive">
-                        <table class="table custom-table table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>{"#"}</th>
-                                    <th>{"Name"}</th>
-                                    <th>{"Size"}</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {
-                                    for self.files.iter().enumerate().map(|(index, (_, file))| {
-                                        html! {{Self::view_file_row(ctx, index, file)}}
-                                    })
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            };
-            
-            html! {
-                <div class="container mt-5">
-                    <div class="row mb-3">
-                        <div class="info-panel bg-light p-3 rounded text-center d-flex justify-content-around align-items-center w-100">
-                            <p class="d-flex align-items-center mb-0">
-                                <span class="pl-3 pr-1 font-weight-bold">{"Connection:"}</span> 
-                                <span class="text-success">{"🟢"}</span>//todo: Add timeout indicator
-                            </p>
-                            <p class="d-flex align-items-center mb-0">
-                                <span class="pl-3 pr-1 font-weight-bold">{"Password:"}</span> 
-                                <span>{format!("{}", if session_details.has_password {"🔓"} else {"🔒"})}</span>
-                            </p>
-                            <p class="d-flex align-items-center mb-0">
-                                <span class="pl-3 pr-1 font-weight-bold">{"Compression:"}</span> 
-                                <span>{session_details.compression_level}</span>
-                            </p>
-                        </div>
-                    </div>
-                    {if self.files.len() > 0 {section_table} else {html!{}}}
-                </div>
+        match self.current_state() {
+            ClientState::Connect => {
+                console::log_1(&"Connect".into());
+                html! { <Connect on_connect={ctx.link().callback(|code: String| Msg::SessionConnect(code.clone(), None))} /> }
             }
-        } else {
-            if !self.password_needed || self.session_code.is_none() {
-                html! {
-                    <Connect on_connect={ctx.link().callback(|code: String| Msg::SessionConnect(code.clone(), None))} />
-                }
-            } else {
+            ClientState::Password => {
                 let session_code = self.session_code.clone().expect("Session code is not set");
-                html! {
-                    <Password on_connect={ctx.link().callback(move |password: String| Msg::SessionConnect(session_code.clone(), Some(password.clone())))} />
-                }
+                html! { <Password on_connect={ctx.link().callback(move |password: String| Msg::SessionConnect(session_code.clone(), Some(password.clone())))} /> }
             }
+            ClientState::Connected => self.view_connected(ctx),
         }
     }
 }
@@ -259,12 +217,14 @@ impl Client {
             ApiServiceMessage::ClientDetails(result) => {
                 if result.is_err() {
                     let status = result.unwrap_err();
-                    if status == 401 {//Unauthorized
+                    if status == 401 {
+                        //Unauthorized
                         self.password_needed = true;
                         return true;
-                    }
-                    else {
-                        console::log_1(&format!("Error getting detail session: {:?}", status).into());
+                    } else {
+                        console::log_1(
+                            &format!("Error getting detail session: {:?}", status).into(),
+                        );
                         return false;
                     }
                 }
@@ -300,6 +260,55 @@ impl Client {
                 true
             }
             _ => false,
+        }
+    }
+
+    fn view_connected(&self, ctx: &Context<Self>) -> Html {
+        let session_details = self.session_details.as_ref().unwrap();
+        let section_table = {
+            html! {
+                <div class="table-wrapper table-responsive">
+                    <table class="table custom-table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>{"#"}</th>
+                                <th>{"Name"}</th>
+                                <th>{"Size"}</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {
+                                for self.files.iter().enumerate().map(|(index, (_, file))| {
+                                    html! {{Self::view_file_row(ctx, index, file)}}
+                                })
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        };
+
+        html! {
+            <div class="container mt-5">
+                <div class="row mb-3">
+                    <div class="info-panel bg-light p-3 rounded text-center d-flex justify-content-around align-items-center w-100">
+                        <p class="d-flex align-items-center mb-0">
+                            <span class="pl-3 pr-1 font-weight-bold">{"Connection:"}</span>
+                            <span class="text-success">{"🟢"}</span>//todo: Add timeout indicator
+                        </p>
+                        <p class="d-flex align-items-center mb-0">
+                            <span class="pl-3 pr-1 font-weight-bold">{"Password:"}</span>
+                            <span>{format!("{}", if session_details.has_password {"🔓"} else {"🔒"})}</span>
+                        </p>
+                        <p class="d-flex align-items-center mb-0">
+                            <span class="pl-3 pr-1 font-weight-bold">{"Compression:"}</span>
+                            <span>{session_details.compression_level}</span>
+                        </p>
+                    </div>
+                </div>
+                {if self.files.len() > 0 {section_table} else {html!{}}}
+            </div>
         }
     }
 
@@ -384,6 +393,16 @@ impl Client {
             );
         }
         true
+    }
+
+    fn current_state(&self) -> ClientState {
+        if self.web_rtc_connected() && self.session_details.is_some() {
+            ClientState::Connected
+        } else if !self.password_needed || self.session_code.is_none() {
+            ClientState::Connect
+        } else {
+            ClientState::Password
+        }
     }
 
     fn web_rtc_connected(&self) -> bool {
