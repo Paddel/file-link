@@ -30,6 +30,12 @@ pub struct FileItem {
     progress: f64,
 }
 
+pub enum HostState {
+    Creating,
+    Sharing,
+    Connected,
+}
+
 pub enum Msg {
     SessionStart,
     CopyShareLink,
@@ -146,11 +152,10 @@ impl Component for Host {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        if self.web_rtc_connected() {
-            self.view_session_handle(ctx)
-        }
-        else {
-            self.view_session_create(ctx)
+        match self.current_state() {
+            HostState::Creating => self.view_session_create(ctx),
+            HostState::Sharing => self.view_session_share(ctx),
+            HostState::Connected => self.view_session_handle(ctx),
         }
     }
 }
@@ -321,51 +326,50 @@ impl Host {
         }
     }
 
-    fn view_session_create (&self, ctx: &Context<Self>) -> Html {
-        if !self.code.is_empty() {
-            let url = format!("{}/receive/{}", self.origin, self.code);
-
-            html! {
-                <div class="container mt-5">
-                    <div class="row justify-content-center">
-                        <div class="col-md-6">
-                            <h2 class="text-center mb-4">{"Share the link"}</h2>
-                            <div class="input-group">
-                                <input type="text" ref={self.node_share.clone()} class="form-control" value={url} readonly={true} />
-                                <div class="input-group-append">
-                                    <button onclick={ctx.link().callback(|_| Msg::CopyShareLink)} class="btn btn-outline-secondary" type="button">{"Copy"}</button>
-                                </div>
-                            </div>
+    fn view_session_create(&self, ctx: &Context<Self>) -> Html {
+        let creation_disabled = self.web_rtc_state.ice_gathering_state == Some(web_sys::RtcIceGatheringState::Gathering);
+        html! {
+            <div class="container mt-5">
+                <div class="row justify-content-center">
+                    <div class="col-md-6">
+                        <h2 class="text-center mb-4">{"Create a Session"}</h2>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">{"Enter Password (Optional):"}</label>
+                            <input type="password" class="form-control" ref={self.node_password.clone()} placeholder="Enter Password" />
+                        </div>
+                        <div class="mb-3">
+                            <Slider label="Compression Level"
+                                min={0} max={10}
+                                onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value as u8)})}
+                                value={self.compression_level as i32}
+                            />
+                        </div>
+                        <div class="mb-3">
+                            <button onclick={ctx.link().callback(|_| Msg::SessionStart)} class="btn btn-primary btn-block" disabled={creation_disabled}>{"Create Session"}</button>
                         </div>
                     </div>
                 </div>
-            }
+            </div>
         }
-        else {
-            let creation_disabled = self.web_rtc_state.ice_gathering_state == Some(web_sys::RtcIceGatheringState::Gathering);
-            html! {
-                <div class="container mt-5">
-                    <div class="row justify-content-center">
-                        <div class="col-md-6">
-                            <h2 class="text-center mb-4">{"Create a Session"}</h2>
-                            <div class="mb-3">
-                                <label for="password" class="form-label">{"Enter Password (Optional):"}</label>
-                                <input type="password" class="form-control" ref={self.node_password.clone()} placeholder="Enter Password" />
-                            </div>
-                            <div class="mb-3">
-                                <Slider label="Compression Level"
-                                    min={0} max={10}
-                                    onchange={ctx.link().callback(|value| {Msg::CompressionUpdate(value as u8)})}
-                                    value={self.compression_level as i32}
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <button onclick={ctx.link().callback(|_| Msg::SessionStart)} class="btn btn-primary btn-block" disabled={creation_disabled}>{"Create Session"}</button>
+    }
+
+    fn view_session_share(&self, ctx: &Context<Self>) -> Html {
+        let url = format!("{}/receive/{}", self.origin, self.code);
+
+        html! {
+            <div class="container mt-5">
+                <div class="row justify-content-center">
+                    <div class="col-md-6">
+                        <h2 class="text-center mb-4">{"Share the link"}</h2>
+                        <div class="input-group">
+                            <input type="text" ref={self.node_share.clone()} class="form-control" value={url} readonly={true} />
+                            <div class="input-group-append">
+                                <button onclick={ctx.link().callback(|_| Msg::CopyShareLink)} class="btn btn-outline-secondary" type="button">{"Copy"}</button>
                             </div>
                         </div>
                     </div>
                 </div>
-            }
+            </div>
         }
     }
 
@@ -454,6 +458,18 @@ impl Host {
                 html! {
                 }
             }
+        }
+    }
+
+    fn current_state(&self) -> HostState {
+        if self.web_rtc_connected() {
+            HostState::Connected
+        }
+        else if self.code.is_empty() {
+            HostState::Creating
+        }
+        else {
+            HostState::Sharing
         }
     }
 }
