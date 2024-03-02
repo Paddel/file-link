@@ -193,7 +193,7 @@ impl DownloadManager {
             let info_meta = info_meta.clone();
             let on_success: Closure<dyn FnMut(web_sys::Event)> = Closure::wrap(Box::new(move |event| {
                 let result = Self::transfer_to_download(&js_blob_parts.borrow_mut(), event);
-                if let Err(err) = result {
+                if let Err(_err) = result {
                     // console::log_1(&format!("Error downloading file: {:?}", err).into());
                     return;
                 }

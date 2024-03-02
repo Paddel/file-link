@@ -7,18 +7,16 @@ use uuid::Uuid;
 use web_sys::console;
 use yew::prelude::*;
 
-use download_manager::DownloadManager;
-
 use crate::file_tag::{convert_bytes_to_readable_format, FileState, FileTag};
 use crate::pages::client::connect::Connect;
 use crate::pages::client::password::Password;
 use crate::services::api_service::{api_service, ApiServiceMessage};
+use crate::services::download_manager::DownloadManager;
 use crate::services::web_rtc::{ConnectionState, State, WebRTCManager, WebRtcMessage};
 use crate::shared::ClientJoinResult;
 use crate::wrtc_protocol::{FileRequest, FilesUpdate};
 
 mod connect;
-mod download_manager;
 mod password;
 
 pub struct FileItem {
