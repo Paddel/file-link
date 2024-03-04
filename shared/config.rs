@@ -25,6 +25,10 @@ pub struct BackendConfig {
     pub web_port: u16,
     pub web_serve_page: String,
     pub web_serve_api: String,
+    pub web_tls_enabled: String,
+    pub web_tls_certs: String,
+    pub web_tls_key: String,
+    pub web_tls_ca_cert: String,
 }
 
 #[derive(Debug, Deserialize)]
