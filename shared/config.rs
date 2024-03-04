@@ -23,6 +23,8 @@ pub struct Config {
 pub struct BackendConfig {
     pub web_bind_addr: String,
     pub web_port: u16,
+    pub web_serve_page: String,
+    pub web_serve_api: String,
 }
 
 #[derive(Debug, Deserialize)]
