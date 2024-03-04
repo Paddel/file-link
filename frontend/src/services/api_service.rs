@@ -228,7 +228,7 @@ pub mod api_service {
     }
 
     fn get_host_address() -> String {
-        let address = "http://".to_string() + HOST_ADDRESS + ":" + &PORT.to_string();
+        let address = HOST_ADDRESS.to_string() + ":" + &PORT.to_string();
         address
     }
 }
