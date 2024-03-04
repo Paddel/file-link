@@ -3,6 +3,10 @@ web_bind_addr = "0.0.0.0"
 web_port = 8000
 web_serve_page = "true"
 web_serve_api = "true"
+web_tls_enabled = "false"
+web_tls_certs = ""
+web_tls_key = ""
+web_tls_ca_cert = ""
 
 [frontend_config]
 api_address="http://localhost:8000"
