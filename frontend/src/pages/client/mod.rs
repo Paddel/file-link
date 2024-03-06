@@ -64,9 +64,9 @@ impl Component for Client {
 
     fn create(ctx: &Context<Self>) -> Self {
         //Direct connect if code is provided
-
         let code = if !ctx.props().code.is_empty() {
-            //TODO: join
+            let callback: Callback<ApiServiceMessage> = ctx.link().callback(Msg::CallbackApi);
+            api_service::get_session_details(callback, &ctx.props().code, None);
             Some(ctx.props().code.clone())
         } else {
             None
