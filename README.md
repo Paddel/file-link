@@ -2,7 +2,6 @@
 A simple full-stack Rust Webapplication facilitating peer-to-peer file transfers. Frontend compiled to WebAssembly with Yew, and both WebRTC and zlib functionalities are also compiled to WebAssembly, in order to enable an efficient P2P connectivity and data compression. Also integrates a simple Tokio signaling server.
 
 [Live Demo](https://pkweber.de:8000)
-
 ### Dependencies:
 zlib is provided as a git submodule, so clone this project with:
 `git clone --recursive https://github.com/Paddel/file-link.git`
